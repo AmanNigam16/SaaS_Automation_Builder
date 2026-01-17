@@ -16,14 +16,22 @@ const UploadCareButton = ({ onUpload }: Props) => {
   >(null)
 
   useEffect(() => {
+    const provider = ctxProviderRef.current
+    if (!provider) return
+
     const handleUpload = async (e: any) => {
       const file = await onUpload(e.detail.cdnUrl)
       if (file) {
         router.refresh()
       }
     }
-    ctxProviderRef.current.addEventListener('file-upload-success', handleUpload)
-  }, [])
+
+    provider.addEventListener('file-upload-success', handleUpload)
+
+    return () => {
+      provider.removeEventListener('file-upload-success', handleUpload)
+    }
+  }, [onUpload, router])
 
   return (
     <div>
@@ -34,7 +42,7 @@ const UploadCareButton = ({ onUpload }: Props) => {
 
       <lr-file-uploader-regular
         ctx-name="my-uploader"
-        css-src={`https://cdn.jsdelivr.net/npm/@uploadcare/blocks@0.35.2/web/lr-file-uploader-regular.min.css`}
+        css-src="https://cdn.jsdelivr.net/npm/@uploadcare/blocks@0.35.2/web/lr-file-uploader-regular.min.css"
       />
 
       <lr-upload-ctx-provider
