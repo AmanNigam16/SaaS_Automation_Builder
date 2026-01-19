@@ -1,12 +1,15 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-import { google } from 'googleapis'
-import { auth, clerkClient } from '@clerk/nextjs'
+
 import { NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
-import { db } from '@/lib/db'
 
 export async function GET() {
+  // ✅ Import EVERYTHING at runtime
+  const { google } = await import('googleapis')
+  const { auth, clerkClient } = await import('@clerk/nextjs')
+  const { db } = await import('@/lib/db')
+
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -18,12 +21,17 @@ export async function GET() {
     return NextResponse.json({ message: 'User not found' })
   }
 
-  const clerkResponse = await clerkClient.users.getUserOauthAccessToken(
-    userId,
-    'oauth_google'
-  )
+  const clerkResponse =
+    await clerkClient.users.getUserOauthAccessToken(
+      userId,
+      'oauth_google'
+    )
 
-  const accessToken = clerkResponse[0].token
+  const accessToken = clerkResponse?.[0]?.token
+  if (!accessToken) {
+    return NextResponse.json({ message: 'No Google access token found' })
+  }
+
   oauth2Client.setCredentials({
     access_token: accessToken,
   })
@@ -32,13 +40,17 @@ export async function GET() {
     version: 'v3',
     auth: oauth2Client,
   })
-  
+
   const channelId = uuidv4()
 
   const startPageTokenRes = await drive.changes.getStartPageToken({})
   const startPageToken = startPageTokenRes.data.startPageToken
-  if (startPageToken == null) {
-    throw new Error('startPageToken is unexpectedly null')
+
+  if (!startPageToken) {
+    return NextResponse.json(
+      { message: 'Failed to get startPageToken' },
+      { status: 500 }
+    )
   }
 
   const listener = await drive.changes.watch({
@@ -48,27 +60,23 @@ export async function GET() {
     requestBody: {
       id: channelId,
       type: 'web_hook',
-      address:
-        `${process.env.NGROK_URI}/api/drive-activity/notification`,
+      address: `${process.env.NGROK_URI}/api/drive-activity/notification`,
       kind: 'api#channel',
     },
   })
 
-  if (listener.status == 200) {
-    //if listener created store its channel id in db
-    const channelStored = await db.user.updateMany({
-      where: {
-        clerkId: userId,
-      },
+  if (listener.status === 200) {
+    await db.user.updateMany({
+      where: { clerkId: userId },
       data: {
         googleResourceId: listener.data.resourceId,
       },
     })
 
-    if (channelStored) {
-      return new NextResponse('Listening to changes...')
-    }
+    return new NextResponse('Listening to changes...')
   }
 
-  return new NextResponse('Oops! something went wrong, try again')
+  return new NextResponse('Oops! something went wrong, try again', {
+    status: 500,
+  })
 }
