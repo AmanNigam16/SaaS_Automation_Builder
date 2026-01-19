@@ -1,9 +1,9 @@
 'use server'
 
-import { db } from '@/lib/db'
-
 export const getUserData = async (id: string) => {
-  const user_info = await db.user.findUnique({
+  const { db } = await import('@/lib/db')
+
+  return db.user.findUnique({
     where: {
       clerkId: id,
     },
@@ -11,6 +11,4 @@ export const getUserData = async (id: string) => {
       connections: true,
     },
   })
-
-  return user_info
 }

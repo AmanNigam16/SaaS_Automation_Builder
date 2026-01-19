@@ -1,9 +1,5 @@
 'use server'
 
-import { db } from '@/lib/db'
-import { currentUser } from '@clerk/nextjs'
-import { Client } from '@notionhq/client'
-
 export const onNotionConnect = async (
   access_token: string,
   workspace_id: string,
@@ -12,66 +8,64 @@ export const onNotionConnect = async (
   database_id: string,
   id: string
 ) => {
-  'use server'
-  if (access_token) {
-    //check if notion is connected
-    const notion_connected = await db.notion.findFirst({
-      where: {
+  if (!access_token) return
+
+  const { db } = await import('@/lib/db')
+
+  const notion_connected = await db.notion.findFirst({
+    where: { accessToken: access_token },
+    include: {
+      connections: { select: { type: true } },
+    },
+  })
+
+  if (!notion_connected) {
+    await db.notion.create({
+      data: {
+        userId: id,
+        workspaceIcon: workspace_icon,
         accessToken: access_token,
-      },
-      include: {
+        workspaceId: workspace_id,
+        workspaceName: workspace_name,
+        databaseId: database_id,
         connections: {
-          select: {
-            type: true,
+          create: {
+            userId: id,
+            type: 'Notion',
           },
         },
       },
     })
-
-    if (!notion_connected) {
-      //create connection
-      await db.notion.create({
-        data: {
-          userId: id,
-          workspaceIcon: workspace_icon!,
-          accessToken: access_token,
-          workspaceId: workspace_id!,
-          workspaceName: workspace_name!,
-          databaseId: database_id,
-          connections: {
-            create: {
-              userId: id,
-              type: 'Notion',
-            },
-          },
-        },
-      })
-    }
   }
 }
+
 export const getNotionConnection = async () => {
+  const { currentUser } = await import('@clerk/nextjs')
+  const { db } = await import('@/lib/db')
+
   const user = await currentUser()
-  if (user) {
-    const connection = await db.notion.findFirst({
-      where: {
-        userId: user.id,
-      },
-    })
-    if (connection) {
-      return connection
-    }
-  }
+  if (!user) return null
+
+  return db.notion.findFirst({
+    where: {
+      userId: user.id,
+    },
+  })
 }
 
 export const getNotionDatabase = async (
   databaseId: string,
   accessToken: string
 ) => {
+  const { Client } = await import('@notionhq/client')
+
   const notion = new Client({
     auth: accessToken,
   })
-  const response = await notion.databases.retrieve({ database_id: databaseId })
-  return response
+
+  return notion.databases.retrieve({
+    database_id: databaseId,
+  })
 }
 
 export const onCreateNewPageInDatabase = async (
@@ -79,27 +73,27 @@ export const onCreateNewPageInDatabase = async (
   accessToken: string,
   content: string
 ) => {
+  const { Client } = await import('@notionhq/client')
+
   const notion = new Client({
     auth: accessToken,
   })
 
-  console.log(databaseId)
-  const response = await notion.pages.create({
+  return notion.pages.create({
     parent: {
       type: 'database_id',
       database_id: databaseId,
     },
     properties: {
-      name: [
-        {
-          text: {
-            content: content,
+      name: {
+        title: [
+          {
+            text: {
+              content,
+            },
           },
-        },
-      ],
+        ],
+      },
     },
   })
-  if (response) {
-    return response
-  }
 }
