@@ -2,10 +2,10 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import React from 'react'
-import dynamic from 'next/dynamic'
+import dynamicImport from 'next/dynamic'
 import WorkflowButton from './_components/workflow-button'
 
-const Workflows = dynamic(() => import('./_components'), {
+const Workflows = dynamicImport(() => import('./_components'), {
   ssr: false,
 })
 
