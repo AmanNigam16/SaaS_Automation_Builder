@@ -7,11 +7,7 @@ import { Webhook } from 'svix'
 import { db } from '@/lib/db'
 
 export async function POST(req: Request) {
-  const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
-
-  if (!WEBHOOK_SECRET) {
-    return new NextResponse('Missing Clerk webhook secret', { status: 500 })
-  }
+  const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET || ''
 
   const headerPayload = headers()
   const svixId = headerPayload.get('svix-id')
@@ -23,6 +19,12 @@ export async function POST(req: Request) {
   }
 
   const payload = await req.text()
+
+  // ⬇️ BUILD-SAFE: do NOT hard-fail if env is missing
+  if (!WEBHOOK_SECRET) {
+    console.warn('CLERK_WEBHOOK_SECRET is not set, skipping webhook')
+    return new NextResponse('Webhook skipped', { status: 200 })
+  }
 
   const wh = new Webhook(WEBHOOK_SECRET)
   let evt: any
