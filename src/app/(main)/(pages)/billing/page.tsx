@@ -2,9 +2,6 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import React from 'react'
-import Stripe from 'stripe'
-import { currentUser } from '@clerk/nextjs'
-import { db } from '@/lib/db'
 import BillingDashboard from './_components/billing-dashboard'
 
 type Props = {
@@ -12,10 +9,14 @@ type Props = {
 }
 
 const Billing = async (props: Props) => {
-  const { session_id } = props.searchParams ?? {
-    session_id: '',
-  }
+  const { session_id } = props.searchParams ?? {}
+
   if (session_id) {
+    // ✅ Import EVERYTHING at runtime
+    const Stripe = (await import('stripe')).default
+    const { currentUser } = await import('@clerk/nextjs')
+    const { db } = await import('@/lib/db')
+
     const stripe = new Stripe(process.env.STRIPE_SECRET!, {
       typescript: true,
       apiVersion: '2023-10-16',
@@ -23,7 +24,8 @@ const Billing = async (props: Props) => {
 
     const session = await stripe.checkout.sessions.listLineItems(session_id)
     const user = await currentUser()
-    if (user) {
+
+    if (user && session.data.length > 0) {
       await db.user.update({
         where: {
           clerkId: user.id,
@@ -31,9 +33,9 @@ const Billing = async (props: Props) => {
         data: {
           tier: session.data[0].description,
           credits:
-            session.data[0].description == 'Unlimited'
+            session.data[0].description === 'Unlimited'
               ? 'Unlimited'
-              : session.data[0].description == 'Pro'
+              : session.data[0].description === 'Pro'
               ? '100'
               : '10',
         },
