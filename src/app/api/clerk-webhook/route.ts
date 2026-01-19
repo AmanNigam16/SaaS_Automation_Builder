@@ -2,13 +2,12 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { Webhook } from 'svix'
 
 export async function POST(req: Request) {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
 
-  // ✅ Build-safe guard
+  // ✅ Build-safe early exit
   if (!WEBHOOK_SECRET) {
     return NextResponse.json({ ok: true })
   }
@@ -34,6 +33,9 @@ export async function POST(req: Request) {
   } catch {
     return new NextResponse('Invalid webhook', { status: 400 })
   }
+
+  // ✅ IMPORT PRISMA ONLY AT RUNTIME
+  const { db } = await import('@/lib/db')
 
   const { id, email_addresses, first_name, image_url } = evt.data
   const email = email_addresses?.[0]?.email_address
