@@ -8,6 +8,11 @@ import {
 } from '@/components/ui/card'
 import Image from 'next/image'
 import Link from 'next/link'
+import {
+  getDiscordOauthUrl,
+  getNotionOauthUrl,
+  getSlackOauthUrl,
+} from '@/lib/app-url'
 
 type Props = {
   type: ConnectionTypes
@@ -16,6 +21,7 @@ type Props = {
   description: string
   callback?: () => void
   connected: {} & any
+  origin?: string
 }
 
 const ConnectionCard = ({
@@ -24,7 +30,17 @@ const ConnectionCard = ({
   icon,
   title,
   connected,
+  origin,
 }: Props) => {
+  const connectHref =
+    title === 'Discord'
+      ? getDiscordOauthUrl(origin)
+      : title === 'Notion'
+      ? getNotionOauthUrl(origin)
+      : title === 'Slack'
+      ? getSlackOauthUrl(origin)
+      : '#'
+
   return (
     <Card className="flex w-full items-center justify-between">
       <CardHeader className="flex flex-col gap-4">
@@ -49,15 +65,7 @@ const ConnectionCard = ({
           </div>
         ) : (
           <Link
-            href={
-              title == 'Discord'
-                ? process.env.NEXT_PUBLIC_DISCORD_REDIRECT!
-                : title == 'Notion'
-                ? process.env.NEXT_PUBLIC_NOTION_AUTH_URL!
-                : title == 'Slack'
-                ? process.env.NEXT_PUBLIC_SLACK_REDIRECT!
-                : '#'
-            }
+            href={connectHref}
             className=" rounded-lg bg-primary p-2 font-bold text-primary-foreground"
           >
             Connect

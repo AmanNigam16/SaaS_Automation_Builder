@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { NextResponse, NextRequest } from 'next/server'
 import url from 'url'
+import { getCallbackUrl } from '@/lib/app-url'
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code')
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     data.append('grant_type', 'authorization_code')
     data.append(
       'redirect_uri',
-      'https://localhost:3000/api/auth/callback/discord'
+      getCallbackUrl('/api/auth/callback/discord', req.nextUrl.origin)
     )
     data.append('code', code.toString())
 
@@ -40,11 +41,21 @@ export async function GET(req: NextRequest) {
         (guild: any) => guild.id == output.data.webhook.guild_id
       )
 
+      const redirectUrl = new URL('/connections', req.nextUrl.origin)
+      redirectUrl.searchParams.set('webhook_id', output.data.webhook.id)
+      redirectUrl.searchParams.set('webhook_url', output.data.webhook.url)
+      redirectUrl.searchParams.set('webhook_name', output.data.webhook.name)
+      redirectUrl.searchParams.set('guild_id', output.data.webhook.guild_id)
+      redirectUrl.searchParams.set('guild_name', UserGuild[0]?.name ?? '')
+      redirectUrl.searchParams.set('channel_id', output.data.webhook.channel_id)
+
       return NextResponse.redirect(
-        `https://localhost:3000/connections?webhook_id=${output.data.webhook.id}&webhook_url=${output.data.webhook.url}&webhook_name=${output.data.webhook.name}&guild_id=${output.data.webhook.guild_id}&guild_name=${UserGuild[0].name}&channel_id=${output.data.webhook.channel_id}`
+        redirectUrl
       )
     }
 
-    return NextResponse.redirect('https://localhost:3000/connections')
+    return NextResponse.redirect(new URL('/connections', req.nextUrl.origin))
   }
+
+  return NextResponse.redirect(new URL('/connections', req.nextUrl.origin))
 }

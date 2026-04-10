@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
+import { getCallbackUrl } from '@/lib/app-url';
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
       data: JSON.stringify({
         grant_type: 'authorization_code',
         code: code,
-        redirect_uri: process.env.NOTION_REDIRECT_URI!,
+        redirect_uri: getCallbackUrl('/api/auth/callback/notion', req.nextUrl.origin),
       }),
     });
     if (response) {
@@ -39,13 +40,16 @@ export async function GET(req: NextRequest) {
         ? databasesPages.results[0].id
         : '';
 
-        console.log(databaseId)
+      const redirectUrl = new URL('/connections', req.nextUrl.origin);
+      redirectUrl.searchParams.set('access_token', response.data.access_token);
+      redirectUrl.searchParams.set('workspace_name', response.data.workspace_name);
+      redirectUrl.searchParams.set('workspace_icon', response.data.workspace_icon ?? '');
+      redirectUrl.searchParams.set('workspace_id', response.data.workspace_id);
+      redirectUrl.searchParams.set('database_id', databaseId);
 
-      return NextResponse.redirect(
-        `https://localhost:3000/connections?access_token=${response.data.access_token}&workspace_name=${response.data.workspace_name}&workspace_icon=${response.data.workspace_icon}&workspace_id=${response.data.workspace_id}&database_id=${databaseId}`
-      );
+      return NextResponse.redirect(redirectUrl);
     }
   }
 
-  return NextResponse.redirect('https://localhost:3000/connections');
+  return NextResponse.redirect(new URL('/connections', req.nextUrl.origin));
 }

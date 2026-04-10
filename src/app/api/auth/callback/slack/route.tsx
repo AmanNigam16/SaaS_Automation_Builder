@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCallbackUrl } from '@/lib/app-url'
 
 export async function GET(req: NextRequest) {
   // Extract the code parameter from the query string
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
         code,
         client_id: process.env.SLACK_CLIENT_ID!,
         client_secret: process.env.SLACK_CLIENT_SECRET!,
-        redirect_uri: process.env.SLACK_REDIRECT_URI!,
+        redirect_uri: getCallbackUrl('/api/auth/callback/slack', req.nextUrl.origin),
       }),
     })
 
@@ -41,12 +42,21 @@ export async function GET(req: NextRequest) {
       const teamName = data?.team?.name
 
       // Handle the successful OAuth flow and redirect the user
-      return NextResponse.redirect(
-        `https://localhost:3000/connections?app_id=${appId}&authed_user_id=${userId}&authed_user_token=${userToken}&slack_access_token=${accessToken}&bot_user_id=${botUserId}&team_id=${teamId}&team_name=${teamName}`
-      )
+      const redirectUrl = new URL('/connections', req.nextUrl.origin)
+      redirectUrl.searchParams.set('app_id', appId)
+      redirectUrl.searchParams.set('authed_user_id', userId)
+      redirectUrl.searchParams.set('authed_user_token', userToken)
+      redirectUrl.searchParams.set('slack_access_token', accessToken)
+      redirectUrl.searchParams.set('bot_user_id', botUserId)
+      redirectUrl.searchParams.set('team_id', teamId)
+      redirectUrl.searchParams.set('team_name', teamName)
+
+      return NextResponse.redirect(redirectUrl)
     }
   } catch (error) {
     console.error(error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+
+  return NextResponse.redirect(new URL('/connections', req.nextUrl.origin))
 }
