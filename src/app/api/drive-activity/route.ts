@@ -1,35 +1,31 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   // ✅ Import EVERYTHING at runtime
   const { google } = await import('googleapis')
-  const { auth, clerkClient } = await import('@clerk/nextjs')
+  const { auth } = await import('@clerk/nextjs')
   const { db } = await import('@/lib/db')
+  const {
+    createGoogleOauthClient,
+    getGoogleDriveAccessToken,
+  } = await import('@/lib/google-drive')
 
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.OAUTH2_REDIRECT_URI
-  )
-
+  const oauth2Client = createGoogleOauthClient()
   const { userId } = auth()
   if (!userId) {
     return NextResponse.json({ message: 'User not found' })
   }
 
-  const clerkResponse =
-    await clerkClient.users.getUserOauthAccessToken(
-      userId,
-      'oauth_google'
-    )
-
-  const accessToken = clerkResponse?.[0]?.token
+  const accessToken = await getGoogleDriveAccessToken(userId)
   if (!accessToken) {
-    return NextResponse.json({ message: 'No Google access token found' })
+    return NextResponse.json(
+      { message: 'Connect Google Drive first' },
+      { status: 400 }
+    )
   }
 
   oauth2Client.setCredentials({
@@ -60,7 +56,9 @@ export async function GET() {
     requestBody: {
       id: channelId,
       type: 'web_hook',
-      address: `${process.env.NGROK_URI}/api/drive-activity/notification`,
+      address: `${
+        process.env.NGROK_URI || req.nextUrl.origin
+      }/api/drive-activity/notification`,
       kind: 'api#channel',
     },
   })

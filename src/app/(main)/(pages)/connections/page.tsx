@@ -7,6 +7,7 @@ import React from 'react'
 import ConnectionCard from './_components/connection-card'
 import { currentUser } from '@clerk/nextjs'
 import { onDiscordConnect } from './_actions/discord-connection'
+import { isGoogleDriveConnected } from './_actions/google-connection'
 import { onNotionConnect } from './_actions/notion-connection'
 import { onSlackConnect } from './_actions/slack-connection'
 import { getUserData } from './_actions/get-user'
@@ -93,6 +94,7 @@ const Connections = async (props: Props) => {
     )
 
     const connections: any = {}
+    const googleConnected = await isGoogleDriveConnected()
 
     const user_info = await getUserData(user.id)
 
@@ -102,9 +104,7 @@ const Connections = async (props: Props) => {
       return (connections[connection.type] = true)
     })
 
-    // Google Drive connection will always be true
-    // as it is given access during the login process
-    return { ...connections, 'Google Drive': true }
+    return { ...connections, 'Google Drive': googleConnected }
   }
 
   const connections = await onUserConnections()

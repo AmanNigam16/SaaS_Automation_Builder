@@ -33,7 +33,9 @@ const ConnectionCard = ({
   origin,
 }: Props) => {
   const connectHref =
-    title === 'Discord'
+    title === 'Google Drive'
+      ? '/api/auth/google/connect'
+      : title === 'Discord'
       ? getDiscordOauthUrl(origin)
       : title === 'Notion'
       ? getNotionOauthUrl(origin)
