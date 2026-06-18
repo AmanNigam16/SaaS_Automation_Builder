@@ -8,6 +8,7 @@ export default authMiddleware({
     '/api/payment/success',
   ],
   ignoredRoutes: [
+    '/api/auth/callback/google',
     '/api/auth/callback/discord',
     '/api/auth/callback/notion',
     '/api/auth/callback/slack',
