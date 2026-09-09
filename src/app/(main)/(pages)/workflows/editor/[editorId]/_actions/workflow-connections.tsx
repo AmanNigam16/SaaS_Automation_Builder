@@ -1,38 +1,64 @@
 'use server'
 
 import { db } from '@/lib/db'
+import {
+  validateLinearWorkflowGraph,
+  validateWorkflowForPublish,
+} from '@/lib/workflow-validation'
+import { auth } from '@clerk/nextjs'
 
 export const onCreateNodesEdges = async (
   flowId: string,
   nodes: string,
   edges: string,
-  flowPath: string
+  _flowPath: string
 ) => {
-  const flow = await db.workflows.update({
+  const { userId } = auth()
+  if (!userId) return { message: 'Unauthorized' }
+
+  const graph = validateLinearWorkflowGraph(nodes, edges)
+
+  const flow = await db.workflows.updateMany({
     where: {
       id: flowId,
+      userId,
     },
     data: {
       nodes,
       edges,
-      flowPath: flowPath,
+      flowPath: JSON.stringify(graph.valid ? graph.steps : []),
     },
   })
 
-  if (flow) return { message: 'flow saved' }
+  return {
+    message: flow.count ? 'flow saved' : 'Workflow not found',
+  }
 }
 
 export const onFlowPublish = async (workflowId: string, state: boolean) => {
-  console.log(state)
-  const published = await db.workflows.update({
+  const { userId } = auth()
+  if (!userId) return 'Unauthorized'
+
+  const validation = state
+    ? await validateWorkflowForPublish(workflowId, userId)
+    : null
+  if (validation && !validation.valid) {
+    return `Cannot publish: ${validation.message}`
+  }
+
+  const published = await db.workflows.updateMany({
     where: {
       id: workflowId,
+      userId,
     },
     data: {
       publish: state,
+      ...(validation?.valid
+        ? { flowPath: JSON.stringify(validation.steps) }
+        : {}),
     },
   })
 
-  if (published.publish) return 'Workflow published'
-  return 'Workflow unpublished'
+  if (!published.count) return 'Workflow not found'
+  return state ? 'Workflow published' : 'Workflow unpublished'
 }

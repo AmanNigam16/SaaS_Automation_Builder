@@ -32,9 +32,21 @@ const FlowInstance = ({ children, edges, nodes }: Props) => {
   }, [nodeConnection])
 
   const onPublishWorkflow = useCallback(async () => {
-    const response = await onFlowPublish(pathname.split('/').pop()!, true)
+    const workflowId = pathname.split('/').pop()!
+    const saved = await onCreateNodesEdges(
+      workflowId,
+      JSON.stringify(nodes),
+      JSON.stringify(edges),
+      JSON.stringify(isFlow)
+    )
+    if (saved.message !== 'flow saved') {
+      toast.error(saved.message)
+      return
+    }
+
+    const response = await onFlowPublish(workflowId, true)
     if (response) toast.message(response)
-  }, [])
+  }, [edges, isFlow, nodes, pathname])
 
   const onAutomateFlow = async () => {
     const flows: any = []

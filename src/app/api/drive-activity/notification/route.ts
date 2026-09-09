@@ -13,8 +13,9 @@ export async function POST(req: NextRequest) {
 
   // ✅ Use request headers (build-safe)
   const channelResourceId = req.headers.get('x-goog-resource-id')
+  const channelToken = req.headers.get('x-goog-channel-token')
 
-  if (!channelResourceId) {
+  if (!channelResourceId || !channelToken) {
     return Response.json({ message: 'success' }, { status: 200 })
   }
 
@@ -24,6 +25,12 @@ export async function POST(req: NextRequest) {
   const user = await db.user.findFirst({
     where: {
       googleResourceId: channelResourceId,
+      LocalGoogleCredential: {
+        is: {
+          webhookToken: channelToken,
+          subscribed: true,
+        },
+      },
     },
     select: { clerkId: true, credits: true },
   })

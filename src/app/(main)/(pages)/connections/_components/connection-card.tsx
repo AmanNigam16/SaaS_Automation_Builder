@@ -13,6 +13,8 @@ import {
   getNotionOauthUrl,
   getSlackOauthUrl,
 } from '@/lib/app-url'
+import { Button } from '@/components/ui/button'
+import { disconnectGoogleDrive } from '../_actions/google-connection'
 
 type Props = {
   type: ConnectionTypes
@@ -21,6 +23,8 @@ type Props = {
   description: string
   callback?: () => void
   connected: {} & any
+  connectionLabel?: string
+  requiresReconnect?: boolean
   origin?: string
 }
 
@@ -30,6 +34,8 @@ const ConnectionCard = ({
   icon,
   title,
   connected,
+  connectionLabel,
+  requiresReconnect,
   origin,
 }: Props) => {
   const connectHref =
@@ -62,16 +68,41 @@ const ConnectionCard = ({
       </CardHeader>
       <div className="flex flex-col items-center gap-2 p-4">
         {connected[type] ? (
-          <div className="border-bg-primary rounded-lg border-2 px-3 py-2 font-bold text-white">
-            Connected
-          </div>
+          <>
+            <div className="border-bg-primary rounded-lg border-2 px-3 py-2 font-bold text-white">
+              Connected
+            </div>
+            {connectionLabel && (
+              <p className="max-w-48 truncate text-xs text-muted-foreground">
+                {connectionLabel}
+              </p>
+            )}
+            {title === 'Google Drive' && (
+              <div className="flex items-center gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href={connectHref}>Reconnect</Link>
+                </Button>
+                <form action={disconnectGoogleDrive}>
+                  <Button size="sm" type="submit" variant="ghost">
+                    Disconnect
+                  </Button>
+                </form>
+              </div>
+            )}
+          </>
         ) : (
-          <Link
-            href={connectHref}
-            className=" rounded-lg bg-primary p-2 font-bold text-primary-foreground"
-          >
-            Connect
-          </Link>
+          <div className="flex flex-col items-center gap-2">
+            {requiresReconnect && (
+              <p className="text-xs text-muted-foreground">
+                Reconnect required
+              </p>
+            )}
+            <Button asChild>
+              <Link href={connectHref}>
+                {requiresReconnect ? 'Reconnect' : 'Connect'}
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
     </Card>

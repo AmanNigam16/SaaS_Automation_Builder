@@ -2,6 +2,7 @@
 
 import { Option } from '@/components/ui/multiple-selector'
 import { db } from '@/lib/db'
+import { validateWorkflowForPublish } from '@/lib/workflow-validation'
 import { auth, currentUser } from '@clerk/nextjs'
 
 /* ----------------------------------
@@ -29,8 +30,11 @@ export const getGoogleListener = async () => {
   const { userId } = auth()
   if (!userId) return
 
-  return await db.user.findUnique({
-    where: { clerkId: userId },
+  return await db.user.findFirst({
+    where: {
+      clerkId: userId,
+      LocalGoogleCredential: { is: { subscribed: true } },
+    },
     select: { googleResourceId: true },
   })
 }
@@ -39,12 +43,28 @@ export const getGoogleListener = async () => {
    Publish / Unpublish Workflow
 ---------------------------------- */
 export const onFlowPublish = async (workflowId: string, state: boolean) => {
-  const published = await db.workflows.update({
-    where: { id: workflowId },
-    data: { publish: state },
+  const { userId } = auth()
+  if (!userId) return 'Unauthorized'
+
+  const validation = state
+    ? await validateWorkflowForPublish(workflowId, userId)
+    : null
+  if (validation && !validation.valid) {
+    return `Cannot publish: ${validation.message}`
+  }
+
+  const published = await db.workflows.updateMany({
+    where: { id: workflowId, userId },
+    data: {
+      publish: state,
+      ...(validation?.valid
+        ? { flowPath: JSON.stringify(validation.steps) }
+        : {}),
+    },
   })
 
-  return published.publish ? 'Workflow published' : 'Workflow unpublished'
+  if (!published.count) return 'Workflow not found'
+  return state ? 'Workflow published' : 'Workflow unpublished'
 }
 
 /* ----------------------------------
@@ -58,47 +78,40 @@ export const onCreateNodeTemplate = async (
   accessToken?: string,
   notionDbId?: string
 ) => {
+  const { userId } = auth()
+  if (!userId) return 'Unauthorized'
+
   if (type === 'Discord') {
-    await db.workflows.update({
-      where: { id: workflowId },
+    const updated = await db.workflows.updateMany({
+      where: { id: workflowId, userId },
       data: { discordTemplate: content },
     })
-    return 'Discord template saved'
+    return updated.count ? 'Discord template saved' : 'Workflow not found'
   }
 
   if (type === 'Slack') {
-    await db.workflows.update({
-      where: { id: workflowId },
+    const updated = await db.workflows.updateMany({
+      where: { id: workflowId, userId },
       data: {
         slackTemplate: content,
         slackAccessToken: accessToken,
+        slackChannels: channels?.map((channel) => channel.value) ?? [],
       },
     })
 
-    if (channels?.length) {
-      for (const channel of channels.map((c) => c.value)) {
-        await db.workflows.update({
-          where: { id: workflowId },
-          data: {
-            slackChannels: { push: channel },
-          },
-        })
-      }
-    }
-
-    return 'Slack template saved'
+    return updated.count ? 'Slack template saved' : 'Workflow not found'
   }
 
   if (type === 'Notion') {
-    await db.workflows.update({
-      where: { id: workflowId },
+    const updated = await db.workflows.updateMany({
+      where: { id: workflowId, userId },
       data: {
         notionTemplate: content,
         notionAccessToken: accessToken,
         notionDbId,
       },
     })
-    return 'Notion template saved'
+    return updated.count ? 'Notion template saved' : 'Workflow not found'
   }
 }
 
@@ -141,8 +154,11 @@ export const onCreateWorkflow = async (
    Get Nodes & Edges (Whiteboard)
 ---------------------------------- */
 export const onGetNodesEdges = async (flowId: string) => {
-  return await db.workflows.findUnique({
-    where: { id: flowId },
+  const { userId } = auth()
+  if (!userId) return null
+
+  return await db.workflows.findFirst({
+    where: { id: flowId, userId },
     select: {
       nodes: true,
       edges: true,

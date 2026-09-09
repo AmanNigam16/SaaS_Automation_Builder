@@ -7,7 +7,7 @@ import React from 'react'
 import ConnectionCard from './_components/connection-card'
 import { currentUser } from '@clerk/nextjs'
 import { onDiscordConnect } from './_actions/discord-connection'
-import { isGoogleDriveConnected } from './_actions/google-connection'
+import { getGoogleDriveConnectionDetails } from './_actions/google-connection'
 import { onNotionConnect } from './_actions/notion-connection'
 import { onSlackConnect } from './_actions/slack-connection'
 import { getUserData } from './_actions/get-user'
@@ -63,40 +63,41 @@ const Connections = async (props: Props) => {
   if (!user) return null
 
   const onUserConnections = async () => {
-    console.log(database_id)
-    await onDiscordConnect(
-      channel_id!,
-      webhook_id!,
-      webhook_name!,
-      webhook_url!,
-      user.id,
-      guild_name!,
-      guild_id!
-    )
-    await onNotionConnect(
-      access_token!,
-      workspace_id!,
-      workspace_icon!,
-      workspace_name!,
-      database_id!,
-      user.id
-    )
-
-    await onSlackConnect(
-      app_id!,
-      authed_user_id!,
-      authed_user_token!,
-      slack_access_token!,
-      bot_user_id!,
-      team_id!,
-      team_name!,
-      user.id
-    )
+    await Promise.all([
+      onDiscordConnect(
+        channel_id!,
+        webhook_id!,
+        webhook_name!,
+        webhook_url!,
+        user.id,
+        guild_name!,
+        guild_id!
+      ),
+      onNotionConnect(
+        access_token!,
+        workspace_id!,
+        workspace_icon!,
+        workspace_name!,
+        database_id!,
+        user.id
+      ),
+      onSlackConnect(
+        app_id!,
+        authed_user_id!,
+        authed_user_token!,
+        slack_access_token!,
+        bot_user_id!,
+        team_id!,
+        team_name!,
+        user.id
+      ),
+    ])
 
     const connections: any = {}
-    const googleConnected = await isGoogleDriveConnected()
-
-    const user_info = await getUserData(user.id)
+    const [googleConnection, user_info] = await Promise.all([
+      getGoogleDriveConnectionDetails(),
+      getUserData(user.id),
+    ])
 
     //get user info with all connections
     user_info?.connections.map((connection) => {
@@ -104,10 +105,16 @@ const Connections = async (props: Props) => {
       return (connections[connection.type] = true)
     })
 
-    return { ...connections, 'Google Drive': googleConnected }
+    return {
+      connections: {
+        ...connections,
+        'Google Drive': googleConnection.connected,
+      },
+      googleConnection,
+    }
   }
 
-  const connections = await onUserConnections()
+  const { connections, googleConnection } = await onUserConnections()
 
   return (
     <div className="relative flex flex-col gap-4">
@@ -126,6 +133,17 @@ const Connections = async (props: Props) => {
               icon={connection.image}
               type={connection.title}
               connected={connections}
+              connectionLabel={
+                connection.title === 'Google Drive'
+                  ? googleConnection.accountEmail ??
+                    googleConnection.accountName ??
+                    undefined
+                  : undefined
+              }
+              requiresReconnect={
+                connection.title === 'Google Drive' &&
+                googleConnection.requiresReconnect
+              }
               origin={requestOrigin}
             />
           ))}

@@ -34,13 +34,19 @@ model User {
 }
 
 model LocalGoogleCredential {
-  id          String @id @default(uuid())
-  accessToken String @unique
+  id            String    @id @default(uuid())
+  accessToken   String    @unique
+  refreshToken  String?
+  expiryDate    DateTime?
+  grantedScopes String[]  @default([])
+  accountEmail  String?
+  accountName   String?
 
-  folderId   String?
-  pageToken  String?
-  channelId  String  @unique @default(uuid())
-  subscribed Boolean @default(false)
+  folderId     String?
+  pageToken    String?
+  channelId    String  @unique @default(uuid())
+  webhookToken String?
+  subscribed   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

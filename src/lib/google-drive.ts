@@ -29,51 +29,103 @@ export const createGoogleOauthClient = (redirectUri?: string) =>
     redirectUri
   )
 
-export const getGoogleDriveAccessToken = async (clerkUserId: string) => {
+const TOKEN_REFRESH_SKEW_MS = 60_000
+
+const getGoogleDriveCredential = async (clerkUserId: string) => {
   const { db } = await import('@/lib/db')
-  const { clerkClient } = await import('@clerk/nextjs')
 
   const dbUser = await db.user.findUnique({
     where: { clerkId: clerkUserId },
-    select: { id: true },
+    select: { LocalGoogleCredential: true },
   })
 
-  if (dbUser) {
-    const localCredential = await db.localGoogleCredential.findUnique({
-      where: { userId: dbUser.id },
-      select: { accessToken: true },
-    })
+  if (!dbUser?.LocalGoogleCredential) return null
 
-    if (localCredential?.accessToken) {
-      return localCredential.accessToken
-    }
+  return dbUser.LocalGoogleCredential
+}
+
+export const getGoogleDriveConnection = async (clerkUserId: string) => {
+  const credential = await getGoogleDriveCredential(clerkUserId)
+
+  if (!credential) {
+    return { connected: false, requiresReconnect: false }
   }
 
-  try {
-    const clerkResponse = await clerkClient.users.getUserOauthAccessToken(
-      clerkUserId,
-      'oauth_google'
-    )
+  const accessTokenIsCurrent = Boolean(
+    credential.expiryDate &&
+      credential.expiryDate.getTime() > Date.now() + TOKEN_REFRESH_SKEW_MS
+  )
+  const canRefresh = Boolean(credential.refreshToken)
 
-    return clerkResponse?.[0]?.token ?? null
-  } catch {
-    return null
+  return {
+    connected: accessTokenIsCurrent || canRefresh,
+    requiresReconnect: !accessTokenIsCurrent && !canRefresh,
+    accountEmail: credential.accountEmail,
+    accountName: credential.accountName,
   }
 }
 
-export const hasGoogleDriveConnection = async (clerkUserId: string) => {
-  const token = await getGoogleDriveAccessToken(clerkUserId)
-  return Boolean(token)
+export const getGoogleDriveClient = async (clerkUserId: string) => {
+  const credential = await getGoogleDriveCredential(clerkUserId)
+  if (!credential) return null
+
+  const oauth2Client = createGoogleOauthClient()
+  oauth2Client.setCredentials({
+    access_token: credential.accessToken,
+    refresh_token: credential.refreshToken,
+    expiry_date: credential.expiryDate?.getTime(),
+    scope: credential.grantedScopes.join(' '),
+  })
+
+  const shouldRefresh =
+    !credential.expiryDate ||
+    credential.expiryDate.getTime() <= Date.now() + TOKEN_REFRESH_SKEW_MS
+
+  if (!shouldRefresh) return oauth2Client
+  if (!credential.refreshToken) return null
+
+  const { credentials } = await oauth2Client.refreshAccessToken()
+  if (!credentials.access_token) return null
+
+  const { db } = await import('@/lib/db')
+  await db.localGoogleCredential.update({
+    where: { id: credential.id },
+    data: {
+      accessToken: credentials.access_token,
+      ...(credentials.refresh_token
+        ? { refreshToken: credentials.refresh_token }
+        : {}),
+      expiryDate: credentials.expiry_date
+        ? new Date(credentials.expiry_date)
+        : null,
+      ...(credentials.scope
+        ? { grantedScopes: credentials.scope.split(' ').filter(Boolean) }
+        : {}),
+    },
+  })
+
+  oauth2Client.setCredentials(credentials)
+  return oauth2Client
 }
 
 export const upsertGoogleDriveConnection = async ({
   clerkUserId,
   accessToken,
+  refreshToken,
+  expiryDate,
+  grantedScopes,
   googleAccountId,
+  accountEmail,
+  accountName,
 }: {
   clerkUserId: string
   accessToken: string
+  refreshToken?: string | null
+  expiryDate?: Date | null
+  grantedScopes?: string[]
   googleAccountId?: string | null
+  accountEmail?: string | null
+  accountName?: string | null
 }) => {
   const { db } = await import('@/lib/db')
   const { currentUser } = await import('@clerk/nextjs')
@@ -103,10 +155,20 @@ export const upsertGoogleDriveConnection = async ({
     where: { userId: dbUser.id },
     update: {
       accessToken,
+      ...(refreshToken ? { refreshToken } : {}),
+      expiryDate,
+      grantedScopes: grantedScopes ?? [],
+      accountEmail,
+      accountName,
     },
     create: {
       userId: dbUser.id,
       accessToken,
+      refreshToken,
+      expiryDate,
+      grantedScopes: grantedScopes ?? [],
+      accountEmail,
+      accountName,
     },
   })
 }

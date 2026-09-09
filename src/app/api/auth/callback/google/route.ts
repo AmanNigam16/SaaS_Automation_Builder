@@ -6,6 +6,22 @@ import {
   createGoogleOauthClient,
   upsertGoogleDriveConnection,
 } from '@/lib/google-drive'
+import {
+  GOOGLE_OAUTH_STATE_COOKIE,
+  isValidOauthState,
+} from '@/lib/oauth-state'
+
+const redirectToConnections = (
+  req: NextRequest,
+  result?: { key: 'google_connected' | 'google_error'; value: string }
+) => {
+  const redirectUrl = new URL('/connections', req.nextUrl.origin)
+  if (result) redirectUrl.searchParams.set(result.key, result.value)
+
+  const response = NextResponse.redirect(redirectUrl)
+  response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE)
+  return response
+}
 
 export async function GET(req: NextRequest) {
   const { userId } = auth()
@@ -14,39 +30,90 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/sign-in', req.nextUrl.origin))
   }
 
+  const oauthError = req.nextUrl.searchParams.get('error')
   const code = req.nextUrl.searchParams.get('code')
+  const state = req.nextUrl.searchParams.get('state')
+  const expectedState = req.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)?.value
+
+  if (oauthError) {
+    return redirectToConnections(req, {
+      key: 'google_error',
+      value: 'authorization_denied',
+    })
+  }
+
+  if (!isValidOauthState(expectedState, state)) {
+    return redirectToConnections(req, {
+      key: 'google_error',
+      value: 'invalid_state',
+    })
+  }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/connections', req.nextUrl.origin))
+    return redirectToConnections(req, {
+      key: 'google_error',
+      value: 'missing_code',
+    })
   }
 
-  const oauth2Client = createGoogleOauthClient(
-    getCallbackUrl('/api/auth/callback/google', req.nextUrl.origin)
-  )
-
-  const { tokens } = await oauth2Client.getToken(code)
-
-  if (!tokens.access_token) {
-    return NextResponse.redirect(new URL('/connections', req.nextUrl.origin))
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return redirectToConnections(req, {
+      key: 'google_error',
+      value: 'configuration',
+    })
   }
 
-  oauth2Client.setCredentials(tokens)
+  try {
+    const oauth2Client = createGoogleOauthClient(
+      getCallbackUrl('/api/auth/callback/google', req.nextUrl.origin)
+    )
 
-  const oauth2 = google.oauth2({
-    auth: oauth2Client,
-    version: 'v2',
-  })
+    const { tokens } = await oauth2Client.getToken(code)
 
-  const profile = await oauth2.userinfo.get()
+    if (!tokens.access_token) {
+      return redirectToConnections(req, {
+        key: 'google_error',
+        value: 'token_exchange',
+      })
+    }
 
-  await upsertGoogleDriveConnection({
-    clerkUserId: userId,
-    accessToken: tokens.access_token,
-    googleAccountId: profile.data.id ?? null,
-  })
+    oauth2Client.setCredentials(tokens)
 
-  const redirectUrl = new URL('/connections', req.nextUrl.origin)
-  redirectUrl.searchParams.set('google_connected', 'true')
+    const oauth2 = google.oauth2({
+      auth: oauth2Client,
+      version: 'v2',
+    })
+    const drive = google.drive({
+      auth: oauth2Client,
+      version: 'v3',
+    })
 
-  return NextResponse.redirect(redirectUrl)
+    const [profile] = await Promise.all([
+      oauth2.userinfo.get(),
+      drive.about.get({ fields: 'user(permissionId)' }),
+    ])
+
+    await upsertGoogleDriveConnection({
+      clerkUserId: userId,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      grantedScopes: tokens.scope?.split(' ').filter(Boolean) ?? [],
+      googleAccountId: profile.data.id ?? null,
+      accountEmail: profile.data.email ?? null,
+      accountName: profile.data.name ?? null,
+    })
+
+    return redirectToConnections(req, {
+      key: 'google_connected',
+      value: 'true',
+    })
+  } catch (error) {
+    console.error('Google OAuth callback failed', error)
+
+    return redirectToConnections(req, {
+      key: 'google_error',
+      value: 'callback_failed',
+    })
+  }
 }

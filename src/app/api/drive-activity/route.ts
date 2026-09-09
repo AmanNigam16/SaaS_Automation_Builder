@@ -4,33 +4,43 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   // ✅ Import EVERYTHING at runtime
   const { google } = await import('googleapis')
   const { auth } = await import('@clerk/nextjs')
   const { db } = await import('@/lib/db')
-  const {
-    createGoogleOauthClient,
-    getGoogleDriveAccessToken,
-  } = await import('@/lib/google-drive')
+  const { getGoogleDriveClient } = await import('@/lib/google-drive')
 
-  const oauth2Client = createGoogleOauthClient()
   const { userId } = auth()
   if (!userId) {
     return NextResponse.json({ message: 'User not found' })
   }
 
-  const accessToken = await getGoogleDriveAccessToken(userId)
-  if (!accessToken) {
+  const dbUser = await db.user.findUnique({
+    where: { clerkId: userId },
+    select: {
+      id: true,
+      googleResourceId: true,
+      LocalGoogleCredential: {
+        select: { subscribed: true },
+      },
+    },
+  })
+  if (!dbUser) {
+    return NextResponse.json({ message: 'User not found' }, { status: 404 })
+  }
+
+  if (dbUser.googleResourceId && dbUser.LocalGoogleCredential?.subscribed) {
+    return NextResponse.json({ message: 'Already listening to changes' })
+  }
+
+  const oauth2Client = await getGoogleDriveClient(userId)
+  if (!oauth2Client) {
     return NextResponse.json(
-      { message: 'Connect Google Drive first' },
+      { message: 'Connect or reconnect Google Drive first' },
       { status: 400 }
     )
   }
-
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-  })
 
   const drive = google.drive({
     version: 'v3',
@@ -38,6 +48,7 @@ export async function GET(req: NextRequest) {
   })
 
   const channelId = uuidv4()
+  const channelToken = uuidv4()
 
   const startPageTokenRes = await drive.changes.getStartPageToken({})
   const startPageToken = startPageTokenRes.data.startPageToken
@@ -55,6 +66,7 @@ export async function GET(req: NextRequest) {
     supportsTeamDrives: true,
     requestBody: {
       id: channelId,
+      token: channelToken,
       type: 'web_hook',
       address: `${
         process.env.NGROK_URI || req.nextUrl.origin
@@ -64,12 +76,23 @@ export async function GET(req: NextRequest) {
   })
 
   if (listener.status === 200) {
-    await db.user.updateMany({
-      where: { clerkId: userId },
-      data: {
-        googleResourceId: listener.data.resourceId,
-      },
-    })
+    await db.$transaction([
+      db.user.update({
+        where: { id: dbUser.id },
+        data: {
+          googleResourceId: listener.data.resourceId,
+        },
+      }),
+      db.localGoogleCredential.update({
+        where: { userId: dbUser.id },
+        data: {
+          channelId,
+          webhookToken: channelToken,
+          pageToken: startPageToken,
+          subscribed: true,
+        },
+      }),
+    ])
 
     return new NextResponse('Listening to changes...')
   }

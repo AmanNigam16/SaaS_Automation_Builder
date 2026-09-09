@@ -16,7 +16,7 @@ const GoogleDriveFiles = (props: Props) => {
   const reqGoogle = async () => {
     try {
       setLoading(true)
-      const response = await axios.get('/api/drive-activity')
+      const response = await axios.post('/api/drive-activity')
       if (response) {
         toast.message(response.data.message ?? 'Google Drive listener created')
         setIsListening(true)

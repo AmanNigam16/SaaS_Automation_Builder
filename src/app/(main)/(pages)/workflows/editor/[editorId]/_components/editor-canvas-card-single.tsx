@@ -67,9 +67,8 @@ const EditorCanvasCardSingle = ({ data }: { data: EditorCanvasCardType }) => {
         </Badge>
         <div
           className={clsx('absolute left-3 top-4 h-2 w-2 rounded-full', {
-            'bg-green-500': Math.random() < 0.6,
-            'bg-orange-500': Math.random() >= 0.6 && Math.random() < 0.8,
-            'bg-red-500': Math.random() >= 0.8,
+            'bg-green-500': data.completed,
+            'bg-orange-500': !data.completed,
           })}
         ></div>
       </Card>

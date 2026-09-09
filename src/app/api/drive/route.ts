@@ -1,10 +1,7 @@
 import { google } from 'googleapis'
 import { auth } from '@clerk/nextjs'
 import { NextResponse } from 'next/server'
-import {
-  createGoogleOauthClient,
-  getGoogleDriveAccessToken,
-} from '@/lib/google-drive'
+import { getGoogleDriveClient } from '@/lib/google-drive'
 
 export async function GET() {
   const { userId } = auth()
@@ -12,18 +9,13 @@ export async function GET() {
     return NextResponse.json({ message: 'User not found' })
   }
 
-  const accessToken = await getGoogleDriveAccessToken(userId)
-  if (!accessToken) {
+  const oauth2Client = await getGoogleDriveClient(userId)
+  if (!oauth2Client) {
     return NextResponse.json(
-      { message: 'Connect Google Drive first' },
+      { message: 'Connect or reconnect Google Drive first' },
       { status: 400 }
     )
   }
-
-  const oauth2Client = createGoogleOauthClient()
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-  })
 
   const drive = google.drive({
     version: 'v3',
