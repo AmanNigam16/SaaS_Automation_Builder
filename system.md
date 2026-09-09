@@ -121,7 +121,8 @@ Neither edit has been committed, pushed, or deployed.
 - Date: 2026-09-09 (Asia/Calcutta)
 - Status: Phase 1 implementation is active and Phase 2A publish-safety work has started. Google OAuth, credential lifecycle, workflow ownership, Drive notification hardening, graph validation, and truthful publish gating are implemented locally. Authenticated Google end-to-end verification remains before Phase 1 completion. The user has explicitly accepted the development-only database credential exposure risk and declined rotation for this personal project.
 - Next implementation target: complete authenticated localhost Google OAuth/Drive verification, then add durable workflow-run/step records and secure execution contracts without exposing unfinished nodes as executable.
-- Commit/push/deployment status: none performed.
+- Commit status: implementation snapshot committed on `codex/phase-1-foundation` as `38f4e4a26baf295c1287c9deab7b226abc2324b8` (`Harden OAuth and workflow publishing foundation`).
+- Push/deployment status: branch push authorized and pending at the time of this record update. No merge, production deployment, or production alias change performed.
 
 ## Change and verification log
 
@@ -210,3 +211,10 @@ Neither edit has been committed, pushed, or deployed.
 - Replaced the random per-render node status dot with a deterministic completed/pending indicator; the UI no longer displays arbitrary red/green health states.
 - Lint and the final production build passed. Only the repository's pre-existing React Hook, old Clerk Edge-runtime, and stale Browserslist warnings remain.
 - No workflow was saved, published, or executed during verification. No commit, push, merge, deployment, production database mutation, or external-service write was performed.
+
+### 2026-09-09 — Development branch checkpoint prepared
+
+- With explicit user approval, audited all tracked and untracked changes before commit. The staged snapshot contained only the intended application source, Prisma schema/migrations, `.env.example`, and this engineering record; no local `.env`, generated build output, or detected secret-shaped value was included.
+- Final verification passed: `npm run lint` completed with only the previously documented React Hook warnings, `npm run build` completed successfully, and `git diff --cached --check` reported no whitespace errors.
+- Created implementation commit `38f4e4a26baf295c1287c9deab7b226abc2324b8` (`Harden OAuth and workflow publishing foundation`) on `codex/phase-1-foundation`.
+- The protected `main` branch and production checkpoint remain `c83ec6550dbddc0acbafa6d3ac1593b8584b06b1`. The development commit has not been merged or promoted to production.
