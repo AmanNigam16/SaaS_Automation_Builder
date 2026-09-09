@@ -122,7 +122,8 @@ Neither edit has been committed, pushed, or deployed.
 - Status: Phase 1 implementation is active and Phase 2A publish-safety work has started. Google OAuth, credential lifecycle, workflow ownership, Drive notification hardening, graph validation, and truthful publish gating are implemented locally. Authenticated Google end-to-end verification remains before Phase 1 completion. The user has explicitly accepted the development-only database credential exposure risk and declined rotation for this personal project.
 - Next implementation target: complete authenticated localhost Google OAuth/Drive verification, then add durable workflow-run/step records and secure execution contracts without exposing unfinished nodes as executable.
 - Commit status: implementation snapshot committed on `codex/phase-1-foundation` as `38f4e4a26baf295c1287c9deab7b226abc2324b8` (`Harden OAuth and workflow publishing foundation`).
-- Push/deployment status: branch push authorized and pending at the time of this record update. No merge, production deployment, or production alias change performed.
+- Push status: `codex/phase-1-foundation` is published to GitHub and tracks `origin/codex/phase-1-foundation`. Remote verification after the push confirmed that `main` remains at the protected checkpoint.
+- Deployment status: no merge, production deployment, or production alias change performed. A Vercel Git integration may independently create a non-production Preview deployment for the development branch.
 
 ## Change and verification log
 
@@ -217,4 +218,6 @@ Neither edit has been committed, pushed, or deployed.
 - With explicit user approval, audited all tracked and untracked changes before commit. The staged snapshot contained only the intended application source, Prisma schema/migrations, `.env.example`, and this engineering record; no local `.env`, generated build output, or detected secret-shaped value was included.
 - Final verification passed: `npm run lint` completed with only the previously documented React Hook warnings, `npm run build` completed successfully, and `git diff --cached --check` reported no whitespace errors.
 - Created implementation commit `38f4e4a26baf295c1287c9deab7b226abc2324b8` (`Harden OAuth and workflow publishing foundation`) on `codex/phase-1-foundation`.
+- Created documentation checkpoint commit `7e84568e2c30a33776cb1e6fb4ade5cbadb0257d` (`Document phase foundation checkpoint`) and pushed the development branch to GitHub.
+- Post-push verification confirmed remote `codex/phase-1-foundation` at `7e84568e2c30a33776cb1e6fb4ade5cbadb0257d` and remote `main` unchanged at `c83ec6550dbddc0acbafa6d3ac1593b8584b06b1`.
 - The protected `main` branch and production checkpoint remain `c83ec6550dbddc0acbafa6d3ac1593b8584b06b1`. The development commit has not been merged or promoted to production.
