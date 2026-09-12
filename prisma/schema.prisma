@@ -110,7 +110,7 @@ model Connections {
 }
 
 model Workflows {
-  id                String   @id @default(uuid())
+  id                String        @id @default(uuid())
   nodes             String?
   edges             String?
   name              String
@@ -123,8 +123,65 @@ model Workflows {
   notionDbId        String?
   flowPath          String?
   cronPath          String?
-  publish           Boolean? @default(false)
+  publish           Boolean?      @default(false)
   description       String
-  User              User     @relation(fields: [userId], references: [clerkId])
+  User              User          @relation(fields: [userId], references: [clerkId])
   userId            String
+  runs              WorkflowRun[]
+}
+
+enum WorkflowRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  PAUSED
+}
+
+enum WorkflowStepStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model WorkflowRun {
+  id             String            @id @default(uuid())
+  workflowId     String
+  triggerType    String
+  triggerEventId String
+  status         WorkflowRunStatus @default(RUNNING)
+  input          Json?
+  output         Json?
+  error          String?
+  startedAt      DateTime          @default(now())
+  finishedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  workflow Workflows         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  steps    WorkflowStepRun[]
+
+  @@unique([workflowId, triggerEventId])
+  @@index([workflowId, createdAt])
+  @@index([status, createdAt])
+}
+
+model WorkflowStepRun {
+  id            String             @id @default(uuid())
+  workflowRunId String
+  stepIndex     Int
+  stepType      String
+  attempt       Int                @default(1)
+  status        WorkflowStepStatus @default(RUNNING)
+  input         Json?
+  output        Json?
+  error         String?
+  startedAt     DateTime           @default(now())
+  finishedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  workflowRun WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, stepIndex, attempt])
+  @@index([workflowRunId, status])
 }

@@ -49,6 +49,10 @@ export async function POST(req: NextRequest) {
 
   const channelId = uuidv4()
   const channelToken = uuidv4()
+  const localRequest = ['localhost', '127.0.0.1'].includes(req.nextUrl.hostname)
+  const webhookOrigin = localRequest
+    ? process.env.NGROK_URI || req.nextUrl.origin
+    : req.nextUrl.origin
 
   const startPageTokenRes = await drive.changes.getStartPageToken({})
   const startPageToken = startPageTokenRes.data.startPageToken
@@ -68,9 +72,7 @@ export async function POST(req: NextRequest) {
       id: channelId,
       token: channelToken,
       type: 'web_hook',
-      address: `${
-        process.env.NGROK_URI || req.nextUrl.origin
-      }/api/drive-activity/notification`,
+      address: `${webhookOrigin.replace(/\/+$/, '')}/api/drive-activity/notification`,
       kind: 'api#channel',
     },
   })

@@ -8,9 +8,16 @@ import {
   executeWorkflowSteps,
   parseStoredCronState,
   scheduleWorkflowResume,
+  verifyWorkflowResumeToken,
 } from '@/lib/workflow-runner'
 
 export async function GET(req: NextRequest) {
+  const resumeToken = req.headers.get('x-workflow-resume-token')
+
+  if (!resumeToken) {
+    return NextResponse.json({ message: 'unauthorized' }, { status: 401 })
+  }
+
   const flowId = req.nextUrl.searchParams.get('flow_id')
 
   if (!flowId) {
@@ -31,6 +38,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'no queued workflow steps' }, { status: 200 })
   }
 
+  if (!verifyWorkflowResumeToken(resumeToken, cronState.resumeTokenHash)) {
+    return NextResponse.json({ message: 'unauthorized' }, { status: 401 })
+  }
+
+  const claimed = await db.workflows.updateMany({
+    where: { id: flow.id, cronPath: flow.cronPath },
+    data: { cronPath: null },
+  })
+
+  if (!claimed.count) {
+    return NextResponse.json({ message: 'workflow already resumed' }, { status: 200 })
+  }
+
   const result = await executeWorkflowSteps(flow, cronState.steps)
 
   await deleteScheduledJob(cronState.jobId)
@@ -45,13 +65,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ message: 'workflow rescheduled' }, { status: 200 })
   }
-
-  await db.workflows.update({
-    where: { id: flow.id },
-    data: {
-      cronPath: null,
-    },
-  })
 
   return NextResponse.json({ message: 'workflow completed' }, { status: 200 })
 }

@@ -84,7 +84,7 @@ const postMessageInSlackChannel = async (
 ): Promise<void> => {
   const axios = (await import('axios')).default
 
-  await axios.post(
+  const { data } = await axios.post(
     'https://slack.com/api/chat.postMessage',
     { channel: slackChannel, text: content },
     {
@@ -94,6 +94,8 @@ const postMessageInSlackChannel = async (
       },
     }
   )
+
+  if (!data.ok) throw new Error('Slack rejected the message')
 }
 
 export const postMessageToSlack = async (
@@ -105,13 +107,11 @@ export const postMessageToSlack = async (
   if (!selectedSlackChannels?.length)
     return { message: 'Channel not selected' }
 
-  for (const channel of selectedSlackChannels) {
-    await postMessageInSlackChannel(
-      slackAccessToken,
-      channel.value,
-      content
+  await Promise.all(
+    selectedSlackChannels.map((channel) =>
+      postMessageInSlackChannel(slackAccessToken, channel.value, content)
     )
-  }
+  )
 
   return { message: 'Success' }
 }
