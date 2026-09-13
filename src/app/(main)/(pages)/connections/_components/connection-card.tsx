@@ -20,7 +20,6 @@ type Props = {
   connected: {} & any
   connectionLabel?: string
   requiresReconnect?: boolean
-  origin?: string
 }
 
 const ConnectionCard = ({
@@ -31,7 +30,6 @@ const ConnectionCard = ({
   connected,
   connectionLabel,
   requiresReconnect,
-  origin,
 }: Props) => {
   const connectHref =
     title === 'Google Drive'

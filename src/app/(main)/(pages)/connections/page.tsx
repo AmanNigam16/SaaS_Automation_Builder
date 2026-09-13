@@ -2,16 +2,13 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { CONNECTIONS } from '@/lib/constant'
-import { getRequestOrigin } from '@/lib/app-url'
 import React from 'react'
 import ConnectionCard from './_components/connection-card'
 import { currentUser } from '@clerk/nextjs'
 import { getGoogleDriveConnectionDetails } from './_actions/google-connection'
 import { getUserData } from './_actions/get-user'
-import { headers } from 'next/headers'
 
 const Connections = async () => {
-  const requestOrigin = getRequestOrigin(headers())
 
   const user = await currentUser()
   if (!user) return null
@@ -68,7 +65,6 @@ const Connections = async () => {
                 connection.title === 'Google Drive' &&
                 googleConnection.requiresReconnect
               }
-              origin={requestOrigin}
             />
           ))}
         </section>
