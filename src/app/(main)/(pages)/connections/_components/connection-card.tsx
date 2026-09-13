@@ -14,7 +14,7 @@ import {
   getSlackOauthUrl,
 } from '@/lib/app-url'
 import { Button } from '@/components/ui/button'
-import { disconnectGoogleDrive } from '../_actions/google-connection'
+import GoogleDriveConnectionActions from './google-drive-connection-actions'
 
 type Props = {
   type: ConnectionTypes
@@ -78,16 +78,7 @@ const ConnectionCard = ({
               </p>
             )}
             {title === 'Google Drive' && (
-              <div className="flex items-center gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link href={connectHref}>Reconnect</Link>
-                </Button>
-                <form action={disconnectGoogleDrive}>
-                  <Button size="sm" type="submit" variant="ghost">
-                    Disconnect
-                  </Button>
-                </form>
-              </div>
+              <GoogleDriveConnectionActions connectHref={connectHref} />
             )}
           </>
         ) : (
