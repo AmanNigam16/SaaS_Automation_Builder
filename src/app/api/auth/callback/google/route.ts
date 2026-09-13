@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs'
 import { google } from 'googleapis'
 import { getCallbackUrl } from '@/lib/app-url'
 import {
@@ -8,7 +7,7 @@ import {
 } from '@/lib/google-drive'
 import {
   GOOGLE_OAUTH_STATE_COOKIE,
-  isValidOauthState,
+  verifyOauthState,
 } from '@/lib/oauth-state'
 
 const redirectToConnections = (
@@ -19,33 +18,39 @@ const redirectToConnections = (
   if (result) redirectUrl.searchParams.set(result.key, result.value)
 
   const response = NextResponse.redirect(redirectUrl)
-  response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE)
+  response.cookies.set(GOOGLE_OAUTH_STATE_COOKIE, '', {
+    httpOnly: true,
+    maxAge: 0,
+    path: '/api/auth/callback/google',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  })
   return response
 }
 
 export async function GET(req: NextRequest) {
-  const { userId } = auth()
-
-  if (!userId) {
-    return NextResponse.redirect(new URL('/sign-in', req.nextUrl.origin))
-  }
-
   const oauthError = req.nextUrl.searchParams.get('error')
   const code = req.nextUrl.searchParams.get('code')
   const state = req.nextUrl.searchParams.get('state')
   const expectedState = req.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)?.value
 
+  const userId = verifyOauthState(
+    expectedState,
+    state,
+    process.env.GOOGLE_CLIENT_SECRET
+  )
+
+  if (!userId) {
+    return redirectToConnections(req, {
+      key: 'google_error',
+      value: 'invalid_state',
+    })
+  }
+
   if (oauthError) {
     return redirectToConnections(req, {
       key: 'google_error',
       value: 'authorization_denied',
-    })
-  }
-
-  if (!isValidOauthState(expectedState, state)) {
-    return redirectToConnections(req, {
-      key: 'google_error',
-      value: 'invalid_state',
     })
   }
 
@@ -108,8 +113,9 @@ export async function GET(req: NextRequest) {
       key: 'google_connected',
       value: 'true',
     })
-  } catch (error) {
-    console.error('Google OAuth callback failed', error)
+  } catch {
+    // OAuth errors can contain authorization codes or tokens; do not log them.
+    console.error('Google OAuth callback failed')
 
     return redirectToConnections(req, {
       key: 'google_error',

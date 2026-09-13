@@ -21,7 +21,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  const state = createOauthState()
+  const { state, cookieValue } = createOauthState(
+    userId,
+    process.env.GOOGLE_CLIENT_SECRET
+  )
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -37,7 +40,7 @@ export async function GET(req: NextRequest) {
     `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
   )
 
-  response.cookies.set(GOOGLE_OAUTH_STATE_COOKIE, state, {
+  response.cookies.set(GOOGLE_OAUTH_STATE_COOKIE, cookieValue, {
     httpOnly: true,
     maxAge: GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS,
     path: '/api/auth/callback/google',

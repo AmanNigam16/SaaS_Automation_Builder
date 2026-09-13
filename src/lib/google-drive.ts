@@ -128,24 +128,16 @@ export const upsertGoogleDriveConnection = async ({
   accountName?: string | null
 }) => {
   const { db } = await import('@/lib/db')
-  const { currentUser } = await import('@clerk/nextjs')
-
-  const authUser = await currentUser()
-  const email = authUser?.emailAddresses?.[0]?.emailAddress
-
   const dbUser = await db.user.upsert({
     where: { clerkId: clerkUserId },
     update: {
       ...(googleAccountId ? { localGoogleId: googleAccountId } : {}),
-      ...(email ? { email } : {}),
-      ...(authUser?.firstName ? { name: authUser.firstName } : {}),
-      ...(authUser?.imageUrl ? { profileImage: authUser.imageUrl } : {}),
     },
     create: {
       clerkId: clerkUserId,
-      email: email ?? `${clerkUserId}@placeholder.local`,
-      name: authUser?.firstName ?? 'User',
-      profileImage: authUser?.imageUrl ?? '',
+      email: `${clerkUserId}@placeholder.local`,
+      name: 'User',
+      profileImage: '',
       localGoogleId: googleAccountId ?? undefined,
     },
     select: { id: true },
