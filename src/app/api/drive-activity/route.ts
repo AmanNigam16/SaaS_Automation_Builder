@@ -16,13 +16,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'User not found' })
   }
 
+  const renew = req.nextUrl.searchParams.get('renew') === 'true'
   const dbUser = await db.user.findUnique({
     where: { clerkId: userId },
     select: {
       id: true,
       googleResourceId: true,
       LocalGoogleCredential: {
-        select: { subscribed: true },
+        select: { subscribed: true, channelId: true },
       },
     },
   })
@@ -30,7 +31,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'User not found' }, { status: 404 })
   }
 
-  if (dbUser.googleResourceId && dbUser.LocalGoogleCredential?.subscribed) {
+  const existingListener =
+    dbUser.googleResourceId && dbUser.LocalGoogleCredential?.subscribed
+
+  if (existingListener && !renew) {
     return NextResponse.json({ message: 'Already listening to changes' })
   }
 
@@ -47,12 +51,46 @@ export async function POST(req: NextRequest) {
     auth: oauth2Client,
   })
 
+  if (existingListener && dbUser.LocalGoogleCredential?.channelId) {
+    try {
+      await drive.channels.stop({
+        requestBody: {
+          id: dbUser.LocalGoogleCredential.channelId,
+          resourceId: dbUser.googleResourceId,
+        },
+      })
+    } catch {
+      return NextResponse.json(
+        { message: 'Could not refresh the existing Google Drive listener' },
+        { status: 502 }
+      )
+    }
+  }
+
   const channelId = uuidv4()
   const channelToken = uuidv4()
   const localRequest = ['localhost', '127.0.0.1'].includes(req.nextUrl.hostname)
   const webhookOrigin = localRequest
     ? process.env.NGROK_URI || req.nextUrl.origin
     : req.nextUrl.origin
+  const webhookUrl = new URL(
+    '/api/drive-activity/notification',
+    webhookOrigin.replace(/\/+$/, '')
+  )
+
+  // Third-party webhook callers cannot send Vercel's bypass header. When a
+  // Preview deployment is protected, Vercel documents the URL query parameter
+  // as the supported service-to-service alternative. This value is server-only
+  // and is never stored in Neon or returned to the browser.
+  if (
+    process.env.VERCEL_ENV === 'preview' &&
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+  ) {
+    webhookUrl.searchParams.set(
+      'x-vercel-protection-bypass',
+      process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+    )
+  }
 
   const startPageTokenRes = await drive.changes.getStartPageToken({})
   const startPageToken = startPageTokenRes.data.startPageToken
@@ -72,7 +110,7 @@ export async function POST(req: NextRequest) {
       id: channelId,
       token: channelToken,
       type: 'web_hook',
-      address: `${webhookOrigin.replace(/\/+$/, '')}/api/drive-activity/notification`,
+      address: webhookUrl.toString(),
       kind: 'api#channel',
     },
   })

@@ -13,12 +13,19 @@ const GoogleDriveFiles = (props: Props) => {
   const [loading, setLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
 
-  const reqGoogle = async () => {
+  const reqGoogle = async (renew = false) => {
     try {
       setLoading(true)
-      const response = await axios.post('/api/drive-activity')
+      const response = await axios.post(
+        renew ? '/api/drive-activity?renew=true' : '/api/drive-activity'
+      )
       if (response) {
-        toast.message(response.data.message ?? 'Google Drive listener created')
+        toast.message(
+          response.data.message ??
+            (renew
+              ? 'Google Drive listener refreshed'
+              : 'Google Drive listener created')
+        )
         setIsListening(true)
       }
     } catch (error: any) {
@@ -44,17 +51,25 @@ const GoogleDriveFiles = (props: Props) => {
   return (
     <div className="flex flex-col gap-3 pb-6">
       {isListening ? (
-        <Card className="py-3">
-          <CardContainer>
-            <CardDescription>Listening...</CardDescription>
-          </CardContainer>
-        </Card>
+        <div className="flex items-center gap-3">
+          <Card className="flex-1 py-3">
+            <CardContainer>
+              <CardDescription>Listening...</CardDescription>
+            </CardContainer>
+          </Card>
+          <Button
+            variant="outline"
+            disabled={loading}
+            onClick={() => reqGoogle(true)}
+          >
+            Refresh listener
+          </Button>
+        </div>
       ) : (
         <Button
           variant="outline"
-          {...(!loading && {
-            onClick: reqGoogle,
-          })}
+          disabled={loading}
+          onClick={() => reqGoogle()}
         >
           {loading ? (
             <div className="absolute flex h-full w-full items-center justify-center">
