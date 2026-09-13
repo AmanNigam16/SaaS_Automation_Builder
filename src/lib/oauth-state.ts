@@ -10,9 +10,9 @@ type GoogleOauthState = {
   expiresAt: number
 }
 
-const sign = (payload: string, secret: string) => {
+const sign = (payload: string, secret: string, provider: string) => {
   const key = createHmac('sha256', secret)
-    .update('fuzzie/google-oauth-state/v1')
+    .update(`fuzzie/oauth-state/v1/${provider}`)
     .digest()
   return createHmac('sha256', key).update(payload).digest('base64url')
 }
@@ -20,7 +20,8 @@ const sign = (payload: string, secret: string) => {
 export const createOauthState = (
   clerkUserId: string,
   secret: string,
-  now = Date.now()
+  now = Date.now(),
+  provider = 'google'
 ) => {
   if (!clerkUserId || !secret) throw new Error('OAuth state configuration is missing')
 
@@ -34,14 +35,15 @@ export const createOauthState = (
     } satisfies GoogleOauthState)
   ).toString('base64url')
 
-  return { state, cookieValue: `${payload}.${sign(payload, secret)}` }
+  return { state, cookieValue: `${payload}.${sign(payload, secret, provider)}` }
 }
 
 export const verifyOauthState = (
   cookieValue: string | undefined,
   receivedState: string | null,
   secret: string | undefined,
-  now = Date.now()
+  now = Date.now(),
+  provider = 'google'
 ): string | null => {
   if (!cookieValue || cookieValue.length > 2048 || !receivedState || !secret) {
     return null
@@ -51,7 +53,7 @@ export const verifyOauthState = (
   if (parts.length !== 2) return null
 
   const [payload, signature] = parts
-  const expected = Buffer.from(sign(payload, secret))
+  const expected = Buffer.from(sign(payload, secret, provider))
   const received = Buffer.from(signature)
   if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
     return null

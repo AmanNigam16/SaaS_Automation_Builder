@@ -6,93 +6,17 @@ import { getRequestOrigin } from '@/lib/app-url'
 import React from 'react'
 import ConnectionCard from './_components/connection-card'
 import { currentUser } from '@clerk/nextjs'
-import { onDiscordConnect } from './_actions/discord-connection'
 import { getGoogleDriveConnectionDetails } from './_actions/google-connection'
-import { onNotionConnect } from './_actions/notion-connection'
-import { onSlackConnect } from './_actions/slack-connection'
 import { getUserData } from './_actions/get-user'
 import { headers } from 'next/headers'
 
-type Props = {
-  searchParams?: { [key: string]: string | undefined }
-}
-
-const Connections = async (props: Props) => {
+const Connections = async () => {
   const requestOrigin = getRequestOrigin(headers())
-  const {
-    webhook_id,
-    webhook_name,
-    webhook_url,
-    guild_id,
-    guild_name,
-    channel_id,
-    access_token,
-    workspace_name,
-    workspace_icon,
-    workspace_id,
-    database_id,
-    app_id,
-    authed_user_id,
-    authed_user_token,
-    slack_access_token,
-    bot_user_id,
-    team_id,
-    team_name,
-  } = props.searchParams ?? {
-    webhook_id: '',
-    webhook_name: '',
-    webhook_url: '',
-    guild_id: '',
-    guild_name: '',
-    channel_id: '',
-    access_token: '',
-    workspace_name: '',
-    workspace_icon: '',
-    workspace_id: '',
-    database_id: '',
-    app_id: '',
-    authed_user_id: '',
-    authed_user_token: '',
-    slack_access_token: '',
-    bot_user_id: '',
-    team_id: '',
-    team_name: '',
-  }
 
   const user = await currentUser()
   if (!user) return null
 
   const onUserConnections = async () => {
-    await Promise.all([
-      onDiscordConnect(
-        channel_id!,
-        webhook_id!,
-        webhook_name!,
-        webhook_url!,
-        user.id,
-        guild_name!,
-        guild_id!
-      ),
-      onNotionConnect(
-        access_token!,
-        workspace_id!,
-        workspace_icon!,
-        workspace_name!,
-        database_id!,
-        user.id
-      ),
-      onSlackConnect(
-        app_id!,
-        authed_user_id!,
-        authed_user_token!,
-        slack_access_token!,
-        bot_user_id!,
-        team_id!,
-        team_name!,
-        user.id
-      ),
-    ])
-
     const connections: any = {}
     const [googleConnection, user_info] = await Promise.all([
       getGoogleDriveConnectionDetails(),

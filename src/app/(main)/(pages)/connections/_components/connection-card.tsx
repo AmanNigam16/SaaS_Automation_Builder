@@ -8,11 +8,6 @@ import {
 } from '@/components/ui/card'
 import Image from 'next/image'
 import Link from 'next/link'
-import {
-  getDiscordOauthUrl,
-  getNotionOauthUrl,
-  getSlackOauthUrl,
-} from '@/lib/app-url'
 import { Button } from '@/components/ui/button'
 import GoogleDriveConnectionActions from './google-drive-connection-actions'
 
@@ -42,11 +37,11 @@ const ConnectionCard = ({
     title === 'Google Drive'
       ? '/api/auth/google/connect'
       : title === 'Discord'
-      ? getDiscordOauthUrl(origin)
+      ? '/api/auth/discord/connect'
       : title === 'Notion'
-      ? getNotionOauthUrl(origin)
+      ? '/api/auth/notion/connect'
       : title === 'Slack'
-      ? getSlackOauthUrl(origin)
+      ? '/api/auth/slack/connect'
       : '#'
 
   return (
