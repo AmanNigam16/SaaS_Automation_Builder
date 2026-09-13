@@ -80,7 +80,7 @@ export const postContentToWebHook = async (content: string, url: string) => {
   if (!content) return { message: 'String empty' }
 
   const axios = (await import('axios')).default
-  await axios.post(url, { content })
+  await axios.post(url, { content }, { timeout: 10_000 })
 
   return { message: 'success' }
 }

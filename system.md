@@ -22,7 +22,6 @@ This file is the durable source of truth for implementation work on this project
 16. Record useful project instructions and decisions from the user here as they arrive. Keep this file concise and current for handoff to other coding agents, but verify relevant claims against code, Git state, and live configuration before acting; this record is context, not proof.
 17. The user explicitly authorizes production-mode builds and thorough tests on the `codex/phase-1-foundation` development branch and isolated test resources. Do not mistake that for approval to run development-schema writes against the production database or to alter `main`. If a build shares `.next` with a running dev server, coordinate or isolate the build output so the user's active session is not disrupted.
 18. Across implementation phases, inspect actual query and request dependencies and eliminate avoidable waterfalls with safe parallel execution, batching, and appropriate standard caching. Measure the latency impact and preserve correctness, authorization, and freshness; do not add speculative caches or concurrency that can duplicate side effects. Aim for responsive, industry-standard SaaS loading times without over-engineering.
-19. The user wants the Google Drive Connected control eventually to show the connected account (at least its email) and offer disconnect/reconnect. Defer this UI enhancement until the secure OAuth callback and connection persistence are verified; then follow the existing visual components and patterns.
 
 ## Protected baseline and rollback
 
@@ -56,16 +55,16 @@ Both edits were later included in the development-branch foundation commit and p
 
 ### Broken, partial, or misleading
 
-- The current deployed `main` checkpoint still has the original Google Drive OAuth callback failure; the branch implementation repairs it but has not been deployed. The production database had no saved Google credential/resource record for the test user at inspection time.
-- Google Drive UI may imply connection without proving usable OAuth credentials or API access.
+- The protected deployed `main` checkpoint still has the original Google Drive OAuth callback behavior. The corrected implementation is deployed only to the development Preview; its OAuth return and isolated credential persistence have been verified. The production database had no saved Google credential/resource record for the test user at its earlier inspection time.
+- The development Preview's Google card shows Connected only for an app-managed credential saved after a successful Drive `about.get` check; an independent file-list request and long-term refresh behavior still need verification.
 - Email, AI, Condition, Custom Webhook, Google Calendar, generic Trigger, and generic Action nodes are primarily or entirely frontend-only.
 - Existing published workflows are not reliable end-to-end automations; observed graphs include unsupported AI nodes and incomplete templates/configuration.
-- The development branch now has durable linear run/step history and per-Drive-change deduplication. It still lacks branching, safe retries, resumable per-run waits, and authenticated end-to-end proof; production `main` does not have the branch implementation.
+- The development branch now has durable linear run/step history, per-Drive-change deduplication, explicit failed/interrupted-run replay, and action-level credit reservation. It still lacks branching, resumable per-run waits, provider-delivered idempotency for every external write, and authenticated Drive-trigger end-to-end proof; production `main` does not have the branch implementation.
 - The branch now implements Google disconnect, reconnect/change-account, account labeling, refresh-token rotation, revocation, and truthful reconnect-required state. Multi-account behavior and equivalent lifecycle controls for the other providers remain.
 - Some server actions may still lack adequate resource-ownership checks. The local branch now requires an unguessable per-schedule token for the legacy cron resume route; it still needs a full per-run resume design and integration verification.
-- Google OAuth state on this working branch is now signed, user-bound, and short-lived; deployment/end-to-end verification remains. Secure token storage and failure recovery still require hardening.
+- Google OAuth state on this working branch is signed, user-bound, short-lived, and deployed to the Preview; its return and credential save are verified. Broader Drive automation E2E, secure token storage, and failure recovery still require work.
 - Credits/billing behavior is incomplete and can render invalid values when Stripe configuration is unavailable.
-- Templates and logs are incomplete product surfaces.
+- Templates remain incomplete; Logs now has durable run-history UI on the development branch but lacks full operational controls and end-to-end run verification.
 - Dependencies include known vulnerabilities and an old Next.js release; upgrades require a separate compatibility-tested phase.
 
 ## Connected inspection capabilities
@@ -76,59 +75,180 @@ Both edits were later included in the development-branch foundation commit and p
 - Google Drive, Gmail, and Google Calendar: read access verified and all use the same test Google account as the application database user. The email address is intentionally omitted here.
 - Clerk MCP: public, stateless SDK guidance only. It cannot access the Clerk Dashboard, users, sessions, secrets, or production logs.
 
-## Delivery phases
+## Original eight-phase roadmap (canonical)
 
-### Phase 1 — Foundation, authentication, and connection truth
+The complete Phase 1–8 definitions below are copied from the user's confirmed roadmap. Its original present-state section is historical; use the live status below for current progress.
 
-- Repair and verify Google OAuth callback routing.
-- Add OAuth state validation and safe redirect/error behavior.
-- Validate Drive credentials with a real read-only API request before showing Connected.
-- Implement token refresh and a clear connection status model.
-- Add view-account, reconnect/change-account, and disconnect/revoke behavior using existing UI patterns.
-- Add ownership checks and secure integration-secret handling where touched.
-- Establish targeted tests and preserve Discord behavior.
+## Remaining implementation phases
 
-### Phase 2 — Workflow contract and durable execution core
+### Phase 1 — Finish and verify the foundation
 
-- Define typed node configuration and validation contracts.
-- Execute the actual directed graph, including condition branches and wait semantics.
-- Add durable runs, per-step status/logging, retries, timeouts, idempotency, and error reporting.
-- Protect cron/webhook execution endpoints and design trigger registration lifecycle.
-- Make publish validation reject incomplete or unsupported workflows.
+- Complete authenticated localhost Google Drive OAuth.
+- Test connection, reconnect, disconnect, expired-token refresh, and revoked-access states.
+- Regression-test Discord, Slack, and Notion with controlled test actions.
+- Add automated tests for authentication, ownership, OAuth state, graph validation, and publishing.
+- Resolve the Prisma migration baseline cleanly on the isolated Neon branch.
+- Produce a Vercel Preview deployment before touching production.
 
-### Phase 3 — Complete currently advertised nodes
+This phase makes the existing supported subset trustworthy.
 
-- Email action through an explicitly selected provider.
-- AI action with provider/model configuration, structured outputs, usage limits, and safe secret handling.
-- Condition branching with typed operators.
-- Custom webhook trigger/action with signature verification and test payloads.
-- Google Calendar actions and triggers.
-- Google Drive triggers/actions backed by validated credentials.
-- Complete generic trigger/action behavior while preserving the existing options; flag anything still unfinished for user review.
+### Phase 2 — Durable automation engine
 
-### Phase 4 — Integrations and no-code usability
+This is the most important missing backend work.
 
-- Standardized connection lifecycle and optional multiple accounts per provider.
-- Field mapping from prior-step outputs, variables, test data, and configuration previews.
-- Trigger polling/webhook registration, schedules, filters, transforms, and unified notifications.
-- Useful templates built only from verified nodes.
+Add:
 
-### Phase 5 — Product hardening and recruiter-ready proof
+- `WorkflowRun` and `WorkflowStepRun` records.
+- Run states such as queued, running, succeeded, failed, waiting, cancelled, and safely halted.
+- Stored inputs, outputs, timestamps, and sanitized errors per step.
+- Retry policies with exponential backoff.
+- Idempotency keys so duplicate webhooks cannot repeat actions.
+- Timeouts and rate-limit handling.
+- Resumable execution after server restarts.
+- Secure cron/webhook execution endpoints.
+- Manual “Run now” and replay-failed-run functionality.
+- Correct credit consumption based on successfully executed action steps.
 
-- Complete execution-history/logs UI, usage/credits, billing failure handling, onboarding, and empty/error states.
-- Resolve dependency vulnerabilities through staged upgrades and regression testing.
-- Measure and remove confirmed frontend/API/database waterfalls.
-- Add end-to-end test scenarios and seedable demo workflows.
-- Validate accessibility, responsive behavior, performance, security boundaries, and rollback readiness.
+Zapier’s comparable product provides run statuses, automatic replay, manual replay, troubleshooting, and alternate error-handling paths. [Zapier run recovery](https://help.zapier.com/hc/en-us/articles/8496037690637-How-to-troubleshoot-errors-in-Zaps), [custom error handling](https://help.zapier.com/hc/en-us/articles/24143756334093-Customize-how-your-Zap-runs-if-it-encounters-an-error)
+
+### Phase 3 — Real no-code workflow semantics
+
+Implement the capabilities that make the canvas more than a visual sequence:
+
+- Typed input/output schema for every node.
+- Field picker containing outputs from preceding steps.
+- Variables and expressions such as trigger file name, email subject, AI result, or event time.
+- Test-step and fetch-sample-data functionality.
+- Conditions for text, number, boolean, date, existence, and list values.
+- `AND`/`OR` condition groups.
+- True/false branches and multi-path workflows.
+- Filters that halt runs when data does not match.
+- Formatter/transform steps for text, dates, JSON, numbers, and lists.
+- Real waits: fixed delay, delay-until time, and resumable scheduling.
+- Looping over list items with safety limits.
+
+Zapier distinguishes filters, which stop a run, from paths, which route it through different outcomes. [Zapier filter and path rules](https://help.zapier.com/hc/en-us/articles/8496180919949-Filter-and-path-rules-in-Zap-workflows), [Paths](https://help.zapier.com/hc/en-us/articles/8496288555917-Add-branching-logic-to-Zap-workflows-with-Paths)
+
+### Phase 4 — Complete the advertised integrations
+
+Implement the currently visible nodes in this order:
+
+1. **Gmail/email**
+
+   - Send email.
+   - Create draft.
+   - New-email trigger.
+   - Sender, recipient, subject, label, and attachment filters.
+   - Decide whether generic transactional email should use Gmail or a dedicated provider such as Resend.
+
+2. **Google Calendar**
+
+   - Create/update/delete event.
+   - Upcoming-event and new-event triggers.
+   - Calendar selection, attendees, timezone, reminders, and conflict handling.
+
+3. **Google Drive**
+
+   - New/updated file trigger.
+   - File/folder selection.
+   - Upload, move, rename, copy, share, download, and metadata actions.
+   - Correct subscription renewal because Google notification channels expire.
+
+4. **Custom webhooks**
+
+   - Unique inbound webhook URL per trigger.
+   - Test payload capture and schema inference.
+   - HMAC/signature verification options.
+   - Outbound HTTP action with method, headers, query, body, timeout, and safe secret fields.
+
+5. **AI action**
+
+   - Prompt and system-instruction configuration.
+   - Previous-step variables.
+   - Structured JSON output.
+   - Summarize, classify, extract, generate, and route modes.
+   - Model/provider selection, limits, retries, token/cost tracking, and redacted logs.
+   - Gemini can be the first provider; its key should remain server-side.
+
+6. **Slack, Discord, and Notion hardening**
+
+   - Test connection/action buttons.
+   - Dynamic channel/database selection.
+   - Account details and reconnect/disconnect parity.
+   - Better API-error and permission messages.
+
+### Phase 5 — Triggering and scheduling
+
+- Cron-based schedules: minute/hour/day/week/custom timezone.
+- Polling triggers for providers without webhooks.
+- Webhook lifecycle registration and removal on publish/unpublish.
+- Renewal jobs for expiring subscriptions.
+- Trigger deduplication and cursor/checkpoint storage.
+- Missed-event recovery.
+- Concurrency controls and per-workflow throttling.
+- Pause/unpause and manual trigger functionality.
+
+For production reliability, long waits should be persisted and resumed rather than keeping a server request alive.
+
+### Phase 6 — Connection management
+
+Create one consistent integration contract:
+
+- Connect.
+- Connected-account identity and granted permissions.
+- Test connection.
+- Reconnect.
+- Change account.
+- Disconnect/revoke.
+- Permission-expired and refresh-failed states.
+- Optional multiple accounts per provider.
+- Choose which connected account a node uses.
+- Encrypt OAuth credentials at rest.
+- Audit connection changes without exposing tokens.
+
+This should reuse the current Google card patterns instead of redesigning the Connections page.
+
+### Phase 7 — Operational UI
+
+Complete the currently weak product surfaces:
+
+- Workflow run-history page.
+- Run-detail timeline with each step’s input, output, duration, attempts, and error.
+- Search and filters by workflow, date, trigger, and status.
+- Retry/replay and cancel controls.
+- Connection-health alerts.
+- Dashboard metrics: successful runs, failures, time saved, and task usage.
+- Useful notifications for failed workflows and expired connections.
+- Workflow versioning, duplication, import/export, and safe draft/published separation.
+
+### Phase 8 — Recruiter-ready product polish
+
+- Create 5–8 verified demonstration workflows, for example:
+
+  - New Drive résumé → AI extraction → Notion candidate record → Discord alert.
+  - Important Gmail → AI summary → Slack notification.
+  - Incoming webhook lead → condition branch → email + Calendar follow-up.
+  - Scheduled daily digest → Gmail/Calendar aggregation → AI summary.
+  - Drive file uploaded → conditional routing based on file type.
+
+- Add guided templates built only from working nodes.
+- Seed a safe demo account and test data.
+- Fix credits/billing fallback behavior.
+- Add onboarding, empty states, permission errors, and recovery guidance.
+- Stage dependency and Next.js upgrades separately.
+- Measure and fix actual query waterfalls and slow API paths.
+- Add accessibility, responsive, security, and full browser E2E checks.
+- Document architecture, tradeoffs, real-world use cases, screenshots, and a demo video.
+
+Current position: **Phase 2 in progress**, with Phase 1 Google Drive connection verification still partially open. A separate authenticated Drive file read, expired-token refresh, and reconnect/disconnect/revocation tests belong to **Phase 1** and should be completed before calling its connection work fully verified. The Drive change → durable run → Logs test exercises **Phase 2's engine**, while full Drive node behavior belongs to **Phase 4** and subscription lifecycle/renewal to **Phase 5**. Account-management standardization/encryption belongs to **Phase 6**. Use only this original eight-phase numbering for planning and status.
 
 ## Current pass
 
-- Date: 2026-09-12 (Asia/Calcutta)
-- Status: Phase 1 Google Drive OAuth and push delivery remain unverified. Phase 2A publish safety and Phase 2B durable run history are committed on the development branch, but Phase 2B is not end-to-end verified. The corrected Preview redeployment is READY, and authenticated `/connections` and `/logs` render without Prisma errors. Normal Chrome reached Google's callback, but Vercel returned an edge-level 401 before the callback handler. A user-approved temporary Vercel Authentication disable was performed, then the original `Require Log In`/`Standard Protection` was restored and verified; no OAuth retry completed during that window. No Preview Drive credential or test run has been created.
-- Next implementation target: coordinate a short live testing window with the user in normal Chrome, temporarily disable Preview protection only after they are ready, have them complete fresh Drive Connect/Allow, verify the isolated Neon credential row and callback logs immediately, then restore protection. This project-level setting exposes all Preview URLs while off, although the production domain remains unchanged. Then test watcher, controlled Drive-change/workflow/Logs without publishing or messaging through inherited incomplete workflows. Do not alter Clerk/OAuth code to compensate for a platform protection boundary. Replace legacy per-workflow wait/cron state with per-run resumable state; add replay only after provider-specific idempotency is enforced.
-- Commit status: current HEAD of `codex/phase-1-foundation` is `f110ebdeae355ec77f8a9204544540c848c599ac` (`Add durable workflow runs and preview-safe Drive delivery`); local worktree was clean after push.
-- Push status: `codex/phase-1-foundation` is published to GitHub and tracks `origin/codex/phase-1-foundation`. Remote verification after the push confirmed that `main` remains at the protected checkpoint.
-- Deployment status: latest branch Preview `dpl_Gun9ateezAFLSZjESaKERxJNH15U` is READY at the stable alias below after the database-variable correction. No merge, production deployment, or production alias change performed.
+- Date: 2026-09-13 (Asia/Calcutta)
+- Status: Original eight-phase roadmap **Phase 2 is in progress**, while Phase 1 Google OAuth callback and credential persistence are verified on the isolated Preview/Neon branch. Google returned to Connections, its account details appeared, and a credential row for the expected Fuzzie user exists without exposing token values. The callback returned 307 rather than the prior Clerk 401/null. The actual Drive capability check (`drive.about.get`) ran before the successful credential save. An independent `files.list` call, token refresh after expiry, reconnect/disconnect/revocation, and detailed first-navigation behavior after Google's redirect are not yet end-to-end verified. Phase 2 durable run history is implemented but not end-to-end verified; complete Drive node work is Phase 4 and subscription lifecycle is Phase 5 in the original roadmap.
+- Next verification target: complete a safe authenticated Drive file-list read on Preview and connection lifecycle tests (Phase 1), then test a controlled Drive change, notification, run, and Logs history on isolated resources (Phase 2 engine with a provisional Drive trigger). Do not publish or message through inherited incomplete workflows. Later Phase 2 work still includes retry/idempotency and recovery; full Drive node semantics and subscription renewal belong to Phases 4 and 5. Do not alter production or `main`.
+- Commit/push status: `codex/phase-1-foundation` and its origin are at `dcbce77f7dc0d4275d1dfd3b6e75d2e18a3b527e` (`Bind Google OAuth callback to signed user state`). `main` remains at the protected checkpoint. This file has local post-deployment verification updates not yet committed; no other source edit is pending.
+- Deployment status: branch Preview `dpl_84EH7EYuEqW4tM8mJBjX3D28Nasw` is READY at the stable branch alias. Vercel Authentication/Standard Protection remains restored. No merge, production deployment, or production alias change performed.
 
 ## Change and verification log
 
@@ -346,9 +466,24 @@ Both edits were later included in the development-branch foundation commit and p
 - Exact installed `@clerk/nextjs@4.29.9` implementation in `node_modules/@clerk/nextjs/dist/cjs/server/authMiddleware.js` calls `authenticateRequest` before checking `publicRoutes`; for an interstitial API request, it calls `handleUnknownState`, which invokes `NextResponse.json(null, { status: 401 })` and adds the Clerk observability headers. This matches the browser response precisely. Thus `publicRoutes` is present and correctly matched in source but **cannot bypass Clerk's earlier interstitial/UAT check** for this callback. `src/app/api/auth/callback/google/route.ts` itself has no 401/null response path. This identifies the failing boundary more strongly than the earlier Vercel-protection hypothesis; do not change `publicRoutes` to `ignoredRoutes` merely to bypass it, because the handler calls `auth()`.
 - Google returned to the exact authorized HTTPS Preview callback, so a Google `redirect_uri_mismatch` is not the observed failure. The callback was stopped before state validation, token exchange, Drive API calls, or credential upsert. Need a secure redesign or Clerk-specific session recovery that binds OAuth state to the initiating authenticated user without depending on the Clerk development-instance UAT cookie surviving Google's cross-site redirect; inspect current Clerk deployment/session guidance and test only on the isolated Preview/Neon branch. No code changed during this diagnosis.
 
-### 2026-09-13 — User-bound Google OAuth callback fix (local, uncommitted)
+### 2026-09-13 — User-bound Google OAuth callback fix
 
 - At the user's request, implemented the narrowly scoped callback fix on `codex/phase-1-foundation`; no UI, Slack, Discord, Notion, schema, production configuration, or `main` change. The authenticated Connect route now issues a random OAuth state plus a 10-minute, HttpOnly, SameSite=Lax, host-only cookie containing the initiating Clerk user ID and expiry, HMAC-signed with a purpose-derived key from the existing server-only Google client secret. The Google callback is the sole additional Clerk-ignored route; it verifies signature, returned state, and expiry before token exchange, then associates the credential with the signed initiating Fuzzie user ID. It does not call Clerk `auth()` or `currentUser()` on the cross-site return. Invalid/missing state fails closed. The OAuth cookie is cleared with its original callback path, and callback errors no longer log potentially sensitive provider error objects.
 - The Google credential upsert preserves an existing User's profile fields instead of fetching Clerk during the callback. If the Clerk webhook has not yet created a User, it uses the existing placeholder profile convention; the webhook remains responsible for profile synchronization. This removes one Clerk network dependency on the return path; Google profile and Drive checks remain parallel, followed by the necessary database writes. No new environment variable, dependency, migration, or extra database query was added.
 - Verified `node node_modules/typescript/bin/tsc --noEmit`, Next lint (only pre-existing React-hook warnings), and a complete optimized Next production build. Focused state checks passed for valid state, mismatch, wrong signature key, and expiry. A temporary local production server on port 3100 returned HTTP 307 to `/connections?google_error=invalid_state` for a missing-cookie callback, with `X-Clerk-Auth-Reason: ignored-route` rather than the prior 401/interstitial; that test server was stopped. `git diff --check` found no whitespace error.
 - **Not yet verified:** a fresh authorized Google consent round trip, credential persistence on isolated Neon, Drive API/watch delivery, or workflow execution on a deployment containing this fix. The current Vercel Preview still runs commit `f110ebd` and does not contain these local edits. Do not claim the OAuth flow is fully repaired until a reviewed branch deployment and end-to-end test. Preview Vercel Authentication is restored to `Standard Protection`. No commit, push, redeploy, production/Neon write, or external Drive action was made in this fix pass.
+
+### 2026-09-13 — Preview deployment and Google Drive OAuth return verified
+
+- After local TypeScript, lint, optimized production build, focused state checks, and diff/secret-shape review, committed and pushed only `codex/phase-1-foundation` at `dcbce77f7dc0d4275d1dfd3b6e75d2e18a3b527e`. `main` remains at `c83ec6550dbddc0acbafa6d3ac1593b8584b06b1`. Vercel Git Preview `dpl_84EH7EYuEqW4tM8mJBjX3D28Nasw` is READY for that exact commit on the stable branch alias; no production deployment or settings were changed.
+- User completed a fresh Google consent flow in normal Chrome and showed `/connections?google_connected=true`; the existing Google card showed Connected, the Google account email, Reconnect, and Disconnect. Vercel deployment runtime logs show `GET /api/auth/callback/google` returning 307 rather than the previous Clerk 401/null. A separate Connections middleware request returned 401 and later Connections requests returned 200, but these logs alone do not establish which browser action caused each request. The callback log was categorized `[error/edge-middleware]` alongside a Node `url.parse()` deprecation warning; no failed callback response was reported in that entry.
+- Read-only query on the isolated Neon branch `br-patient-hat-ahz29gaz` confirmed exactly one app-managed `LocalGoogleCredential` joined to the expected Fuzzie Clerk user, with matching Google account email/name and nonempty access and refresh tokens. Their values were neither queried nor logged. This verifies callback routing, token exchange, and credential persistence. It does **not** yet prove Drive API reads, watcher delivery, workflow execution, or Logs history. No production database write was made.
+- User's Chrome Network screenshots show a `GET /connections?google_connected=true` document returning HTTP 200 OK with `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate`; page assets loaded. The user stated that the 200 requests shown after the 307 in the Vercel view came from reloading, so do **not** claim they prove the first automatic post-callback navigation succeeded. The newly supplied Vercel screenshot selects `GET /api/auth/google/connect` with `_rsc` and `Prefetch: Yes`: its 307 is a Connect-route prefetch, **not** the Google callback. The callback's separate 307 comes from the deployment runtime logs at 07:22:53 UTC. Credential persistence is independently verified in isolated Neon; Drive-triggered automation remains untested.
+
+### 2026-09-13 — Phase 2 run recovery and action-level accounting
+
+- Added an additive isolated-branch migration for `WorkflowStepRun.retryable`, `creditCharged`, and a safe error classification code. It was applied and verified only on Neon branch `br-patient-hat-ahz29gaz`; the migration ledger contains the matching source checksum. Production schema and rows were not changed.
+- Drive notifications still deduplicate one provider event per workflow at the database boundary, but no longer deduct one credit for a whole notification batch. Before each configured Discord, Slack, or Notion action, the runner atomically reserves one available credit (or accepts `Unlimited`) and records that reservation on the step. A malformed or unsupported existing workflow fails before charging a credit.
+- Existing completed steps are never automatically replayed. Failed, paused, and stale interrupted runs have an explicit owner-scoped Logs retry control; it resumes at the first incomplete action and creates a later attempt record. Timeout and 429-rate-limit failures are labeled for review rather than blindly re-sent: Discord and Notion writes cannot be proven idempotent with the current provider APIs, so automatic replay could duplicate an external side effect. Provider requests now have a 10-second deadline.
+- Added owner-scoped `Run now` to existing workflow cards and re-enabled their existing publish switch through the already-present server-side publish validation. Both controls require the saved graph/provider configuration and preserve the existing frontend design patterns.
+- Verification completed locally: Prisma format and validation, generated Prisma client without replacing the localhost-locked engine, TypeScript `--noEmit`, Next lint (only pre-existing hook warnings), optimized Next production build, and diff whitespace check. The production build is source/schema validation only; the Drive listener, Drive API list, a harmless Drive change, provider action delivery, and Logs E2E remain to be verified on the next Preview deployment. No Google Drive file, Slack/Discord message, Notion page, or production resource was created or changed in this pass.

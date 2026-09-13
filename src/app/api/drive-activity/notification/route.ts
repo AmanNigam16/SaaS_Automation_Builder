@@ -157,14 +157,6 @@ export async function POST(req: NextRequest) {
     currentPageToken = response.data.nextPageToken ?? ''
   }
 
-  if (counts.succeeded && user.credits !== 'Unlimited') {
-    const remainingCredits = Math.max(0, availableCredits - 1)
-    await db.user.update({
-      where: { clerkId: user.clerkId },
-      data: { credits: `${remainingCredits}` },
-    })
-  }
-
   return Response.json(
     {
       message: 'notification processed',

@@ -33,6 +33,18 @@ type DurableRunInput = {
   metadata?: Prisma.InputJsonValue
 }
 
+type ExistingRunOptions = {
+  runId: string
+  startStepIndex: number
+  nextAttemptByStep: Map<number, number>
+}
+
+type ActionFailure = {
+  message: string
+  retryable: boolean
+  errorCode: string
+}
+
 const CONFIGURATION_ERRORS = new Set([
   'Discord template is missing',
   'Discord connection is missing',
@@ -49,7 +61,49 @@ const getErrorMessage = (error: unknown, stepType: string) => {
   return `${stepType} action failed`
 }
 
-const executeAction = async (flow: WorkflowRecord, step: string) => {
+const getActionFailure = (error: unknown, stepType: string): ActionFailure => {
+  if (error instanceof SyntaxError) {
+    return {
+      message: 'Notion template is invalid',
+      retryable: false,
+      errorCode: 'INVALID_TEMPLATE',
+    }
+  }
+
+  if (error instanceof Error && CONFIGURATION_ERRORS.has(error.message)) {
+    return {
+      message: error.message,
+      retryable: false,
+      errorCode: 'CONFIGURATION',
+    }
+  }
+
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 429) {
+      return {
+        message: `${stepType} is rate limited. Retry this run later.`,
+        retryable: true,
+        errorCode: 'RATE_LIMITED',
+      }
+    }
+
+    if (error.code === 'ECONNABORTED') {
+      return {
+        message: `${stepType} timed out. Review before retrying because the provider may have received the request.`,
+        retryable: true,
+        errorCode: 'TIMEOUT',
+      }
+    }
+  }
+
+  return {
+    message: getErrorMessage(error, stepType),
+    retryable: false,
+    errorCode: 'PROVIDER_ERROR',
+  }
+}
+
+const prepareAction = async (flow: WorkflowRecord, step: string) => {
   if (step === 'Discord') {
     if (!flow.discordTemplate) throw new Error('Discord template is missing')
 
@@ -60,8 +114,9 @@ const executeAction = async (flow: WorkflowRecord, step: string) => {
 
     if (!discordMessage) throw new Error('Discord connection is missing')
 
-    await postContentToWebHook(flow.discordTemplate, discordMessage.url)
-    return
+    return async () => {
+      await postContentToWebHook(flow.discordTemplate!, discordMessage.url)
+    }
   }
 
   if (step === 'Slack') {
@@ -78,12 +133,13 @@ const executeAction = async (flow: WorkflowRecord, step: string) => {
       value: channel,
     }))
 
-    await postMessageToSlack(
-      flow.slackAccessToken,
-      channels,
-      flow.slackTemplate
-    )
-    return
+    return async () => {
+      await postMessageToSlack(
+        flow.slackAccessToken!,
+        channels,
+        flow.slackTemplate!
+      )
+    }
   }
 
   if (step === 'Notion') {
@@ -95,15 +151,40 @@ const executeAction = async (flow: WorkflowRecord, step: string) => {
       throw new Error('Notion configuration is incomplete')
     }
 
-    await onCreateNewPageInDatabase(
-      flow.notionDbId,
-      flow.notionAccessToken,
-      JSON.parse(flow.notionTemplate)
-    )
-    return
+    const content = JSON.parse(flow.notionTemplate)
+    return async () => {
+      await onCreateNewPageInDatabase(
+        flow.notionDbId!,
+        flow.notionAccessToken!,
+        content
+      )
+    }
   }
 
   throw new Error(`${step} is not executable`)
+}
+
+const executeAction = async (flow: WorkflowRecord, step: string) => {
+  const action = await prepareAction(flow, step)
+  await action()
+}
+
+const reserveActionCredit = async (clerkUserId: string) => {
+  const reserved = await db.$queryRaw<Array<{ credits: string }>>`
+    UPDATE "User"
+    SET "credits" = CASE
+      WHEN "credits" = 'Unlimited' THEN "credits"
+      ELSE (("credits")::integer - 1)::text
+    END
+    WHERE "clerkId" = ${clerkUserId}
+      AND (
+        "credits" = 'Unlimited'
+        OR ("credits" ~ '^[0-9]+$' AND ("credits")::integer > 0)
+      )
+    RETURNING "credits"
+  `
+
+  return reserved.length === 1
 }
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
@@ -187,32 +268,45 @@ export const verifyWorkflowResumeToken = (
 export const executeDurableWorkflowRun = async (
   flow: WorkflowRecord,
   steps: string[],
-  trigger: DurableRunInput
+  trigger: DurableRunInput,
+  existingRun?: ExistingRunOptions
 ) => {
   let run
 
-  try {
-    run = await db.workflowRun.create({
-      data: {
-        workflowId: flow.id,
-        triggerType: trigger.triggerType,
-        triggerEventId: trigger.eventId,
-        input: trigger.metadata,
-      },
-      select: { id: true },
+  if (existingRun) {
+    const claimed = await db.workflowRun.updateMany({
+      where: { id: existingRun.runId, status: { in: ['FAILED', 'PAUSED'] } },
+      data: { status: 'RUNNING', error: null, finishedAt: null },
     })
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      return { status: 'duplicate' as const }
-    }
 
-    throw error
+    if (!claimed.count) return { status: 'unavailable' as const }
+    run = { id: existingRun.runId }
+  } else {
+    try {
+      run = await db.workflowRun.create({
+        data: {
+          workflowId: flow.id,
+          triggerType: trigger.triggerType,
+          triggerEventId: trigger.eventId,
+          input: trigger.metadata,
+        },
+        select: { id: true },
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return { status: 'duplicate' as const }
+      }
+
+      throw error
+    }
   }
 
-  if (!steps.length) {
+  const startStepIndex = existingRun?.startStepIndex ?? 0
+
+  if (!steps.length || startStepIndex >= steps.length) {
     await db.workflowRun.update({
       where: { id: run.id },
       data: {
@@ -225,19 +319,49 @@ export const executeDurableWorkflowRun = async (
     return { status: 'failed' as const, runId: run.id }
   }
 
-  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+  for (let stepIndex = startStepIndex; stepIndex < steps.length; stepIndex++) {
     const stepType = steps[stepIndex]
     const stepRun = await db.workflowStepRun.create({
       data: {
         workflowRunId: run.id,
         stepIndex,
         stepType,
+        attempt: existingRun?.nextAttemptByStep.get(stepIndex) ?? 1,
       },
       select: { id: true },
     })
 
     try {
-      await executeAction(flow, stepType)
+      const action = await prepareAction(flow, stepType)
+
+      const creditReserved = await reserveActionCredit(flow.userId)
+      if (!creditReserved) {
+        await db.workflowStepRun.update({
+          where: { id: stepRun.id },
+          data: {
+            status: 'FAILED',
+            error: 'No credits are available for this action',
+            errorCode: 'NO_CREDITS',
+            finishedAt: new Date(),
+          },
+        })
+        await db.workflowRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'FAILED',
+            error: 'No credits are available for this action',
+            finishedAt: new Date(),
+          },
+        })
+        return { status: 'failed' as const, runId: run.id }
+      }
+
+      await db.workflowStepRun.update({
+        where: { id: stepRun.id },
+        data: { creditCharged: true },
+      })
+
+      await action()
       await db.workflowStepRun.update({
         where: { id: stepRun.id },
         data: {
@@ -247,14 +371,16 @@ export const executeDurableWorkflowRun = async (
         },
       })
     } catch (error) {
-      const message = getErrorMessage(error, stepType)
+      const failure = getActionFailure(error, stepType)
 
       await db.$transaction([
         db.workflowStepRun.update({
           where: { id: stepRun.id },
           data: {
             status: 'FAILED',
-            error: message,
+            error: failure.message,
+            errorCode: failure.errorCode,
+            retryable: failure.retryable,
             finishedAt: new Date(),
           },
         }),
@@ -262,7 +388,7 @@ export const executeDurableWorkflowRun = async (
           where: { id: run.id },
           data: {
             status: 'FAILED',
-            error: message,
+            error: failure.message,
             finishedAt: new Date(),
           },
         }),

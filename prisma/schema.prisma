@@ -172,6 +172,9 @@ model WorkflowStepRun {
   stepType      String
   attempt       Int                @default(1)
   status        WorkflowStepStatus @default(RUNNING)
+  retryable     Boolean            @default(false)
+  creditCharged Boolean            @default(false)
+  errorCode     String?
   input         Json?
   output        Json?
   error         String?

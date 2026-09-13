@@ -27,7 +27,14 @@ export const getGoogleDriveConnectionDetails = async () => {
   const { getGoogleDriveConnection } = await import('@/lib/google-drive')
   const { userId } = auth()
 
-  if (!userId) return { connected: false, requiresReconnect: false }
+  if (!userId) {
+    return {
+      connected: false,
+      requiresReconnect: false,
+      accountEmail: null,
+      accountName: null,
+    }
+  }
 
   return getGoogleDriveConnection(userId)
 }

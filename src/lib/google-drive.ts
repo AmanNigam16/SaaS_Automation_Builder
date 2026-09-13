@@ -44,11 +44,23 @@ const getGoogleDriveCredential = async (clerkUserId: string) => {
   return dbUser.LocalGoogleCredential
 }
 
-export const getGoogleDriveConnection = async (clerkUserId: string) => {
+export const getGoogleDriveConnection = async (
+  clerkUserId: string
+): Promise<{
+  connected: boolean
+  requiresReconnect: boolean
+  accountEmail: string | null
+  accountName: string | null
+}> => {
   const credential = await getGoogleDriveCredential(clerkUserId)
 
   if (!credential) {
-    return { connected: false, requiresReconnect: false }
+    return {
+      connected: false,
+      requiresReconnect: false,
+      accountEmail: null,
+      accountName: null,
+    }
   }
 
   const accessTokenIsCurrent = Boolean(

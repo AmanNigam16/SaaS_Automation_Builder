@@ -61,6 +61,7 @@ export const getNotionDatabase = async (
 
   const notion = new Client({
     auth: accessToken,
+    timeoutMs: 10_000,
   })
 
   return notion.databases.retrieve({
@@ -77,6 +78,7 @@ export const onCreateNewPageInDatabase = async (
 
   const notion = new Client({
     auth: accessToken,
+    timeoutMs: 10_000,
   })
 
   return notion.pages.create({

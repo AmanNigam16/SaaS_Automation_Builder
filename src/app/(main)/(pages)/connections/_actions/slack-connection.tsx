@@ -92,6 +92,7 @@ const postMessageInSlackChannel = async (
         Authorization: `Bearer ${slackAccessToken}`,
         'Content-Type': 'application/json;charset=utf-8',
       },
+      timeout: 10_000,
     }
   )
 

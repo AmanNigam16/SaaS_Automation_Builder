@@ -9,8 +9,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { onFlowPublish } from '../_actions/workflow-connections'
+import { runWorkflowNow } from '../_actions/workflow-runs'
 
 type Props = {
   name: string
@@ -20,12 +22,14 @@ type Props = {
 }
 
 const Workflow = ({ description, id, name, publish }: Props) => {
-  const onPublishFlow = async (event: any) => {
-    const response = await onFlowPublish(
-      id,
-      event.target.ariaChecked === 'false'
-    )
+  const onPublishFlow = async (state: boolean) => {
+    const response = await onFlowPublish(id, state)
     if (response) toast.message(response)
+  }
+
+  const onRunWorkflow = async () => {
+    const response = await runWorkflowNow(id)
+    toast.message(response.message)
   }
 
   return (
@@ -70,9 +74,12 @@ const Workflow = ({ description, id, name, publish }: Props) => {
         </Label>
         <Switch
           id="airplane-mode"
-          // onClick={onPublishFlow}
+          onCheckedChange={onPublishFlow}
           defaultChecked={publish!}
         />
+        <Button size="sm" variant="outline" onClick={onRunWorkflow}>
+          Run now
+        </Button>
       </div>
     </Card>
   )

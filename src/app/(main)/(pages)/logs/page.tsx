@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/card'
 import { db } from '@/lib/db'
 import { cn } from '@/lib/utils'
+import { RetryRunButton } from './_components/retry-run-button'
 
 const statusDetails = {
   RUNNING: {
@@ -114,6 +115,9 @@ const LogsPage = async () => {
                       <StatusIcon className="h-3.5 w-3.5" />
                       {details.label}
                     </Badge>
+                    {(run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
+                      <RetryRunButton runId={run.id} />
+                    )}
                   </div>
                   {run.error && (
                     <p className="text-sm text-red-500">{run.error}</p>
@@ -169,6 +173,11 @@ const LogsPage = async () => {
                             {step.error && (
                               <p className="w-full pl-10 text-xs text-red-500">
                                 {step.error}
+                              </p>
+                            )}
+                            {step.retryable && (
+                              <p className="w-full pl-10 text-xs text-muted-foreground">
+                                This provider failure may be retried after review.
                               </p>
                             )}
                           </div>
