@@ -1,0 +1,2 @@
+ALTER TABLE "Slack"
+  ALTER COLUMN "authedUserToken" DROP NOT NULL;

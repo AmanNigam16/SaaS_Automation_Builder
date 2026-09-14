@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
   const params = new URLSearchParams({
     client_id: clientId,
     scope: 'chat:write,channels:read,groups:read,mpim:read,im:read',
-    user_scope: 'chat:write,channels:read,groups:read,mpim:read,im:read',
     redirect_uri: getCallbackUrl('/api/auth/callback/slack', req.nextUrl.origin),
     state,
   })

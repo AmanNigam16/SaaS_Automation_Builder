@@ -73,8 +73,8 @@ model Slack {
 
   appId            String
   authedUserId     String
-  authedUserToken  String @unique
-  slackAccessToken String @unique
+  authedUserToken  String? @unique
+  slackAccessToken String  @unique
   botUserId        String
   teamId           String
   teamName         String

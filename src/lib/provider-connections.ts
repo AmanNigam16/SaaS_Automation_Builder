@@ -81,7 +81,7 @@ export const saveNotionConnection = async (
 type SlackConnection = {
   appId: string
   authedUserId: string
-  authedUserToken: string
+  authedUserToken: string | null
   slackAccessToken: string
   botUserId: string
   teamId: string

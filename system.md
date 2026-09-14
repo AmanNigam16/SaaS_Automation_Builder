@@ -22,6 +22,7 @@ This file is the durable source of truth for implementation work on this project
 16. Record useful project instructions and decisions from the user here as they arrive. Keep this file concise and current for handoff to other coding agents, but verify relevant claims against code, Git state, and live configuration before acting; this record is context, not proof.
 17. The user explicitly authorizes production-mode builds and thorough tests on the `codex/phase-1-foundation` development branch and isolated test resources. Do not mistake that for approval to run development-schema writes against the production database or to alter `main`. If a build shares `.next` with a running dev server, coordinate or isolate the build output so the user's active session is not disrupted.
 18. Across implementation phases, inspect actual query and request dependencies and eliminate avoidable waterfalls with safe parallel execution, batching, and appropriate standard caching. Measure the latency impact and preserve correctness, authorization, and freshness; do not add speculative caches or concurrency that can duplicate side effects. Aim for responsive, industry-standard SaaS loading times without over-engineering.
+19. Preserve every user-opened or agent-opened browser tab during testing. Do not close a tab unless the user explicitly asks to close that exact tab; preserve OAuth tabs and their in-progress state across checks, and use a new tab only when a new attempt is genuinely required.
 
 ## Protected baseline and rollback
 
@@ -516,3 +517,33 @@ Current position: **Phase 2 in progress**, with Phase 1 Google Drive connection 
 - Existing provider connection records are not deleted or revoked. A deliberate reconnect updates only the authenticated Fuzzie user's existing provider record, preserving the existing action paths and stored workflow configuration.
 - This removes tokens and Discord webhook URLs from browser history, referrers, analytics, and application URLs. It does not claim encryption at rest: the roadmap's centralized credential encryption and connection lifecycle work remain Phase 6 and require a separate managed-key migration.
 - TypeScript `--noEmit` and the optimized Next production build passed. Next lint completed with only pre-existing React Hook dependency warnings. Provider consent/reconnect testing still requires an explicit user action at the OAuth provider; do not perform a destructive disconnect/revoke merely to test it.
+
+### 2026-09-14 — Discord Preview callback verification
+
+- Preserved the existing Discord redirect and added the stable isolated Preview callback URI in the Discord developer portal. Its persistence was confirmed by a portal reload; no production callback or deployment setting was changed.
+- With the user selecting the dedicated `SaaS Automation Test` server and its `#general` channel, Discord OAuth returned to Preview as `/connections?discord_connected=true`. The Connections UI then rendered Discord as Connected. The callback URL contained no provider access token or webhook URL, so the new server-side OAuth handoff is verified for Discord.
+- No Discord message, workflow action, credential value, or production resource was accessed or changed during this verification.
+
+### 2026-09-14 — Slack and Notion Preview callback preflight
+
+- Opening the Preview Connect routes reached Notion's integration login and Slack's workspace sign-in, with the stable Preview callback URI included in each authorization request. Neither provider reported a redirect URI mismatch.
+- No login, consent, workspace installation, message, page write, or credential persistence was performed. The Notion and Slack authorization tabs must stay open until the user completes their own login and explicitly approves the provider-specific consent screen.
+
+### 2026-09-14 — Notion and Slack provider configuration blockers
+
+- After an authenticated Notion retry, Notion rejected the stable Preview callback with `Missing or invalid redirect_uri`. The Notion integration configuration needs that exact Preview callback URI added while preserving the existing callbacks.
+- Slack accepted the Preview callback request and recognized the signed-in test workspace, but its authorization page returned `invalid_team_for_non_distributed_app`. The current Slack app is restricted to a different development workspace; resolving this requires a deliberate Slack app-distribution or approved-workspace configuration decision, not an application-code change.
+- No provider consent, Slack installation, workspace membership change, Notion write, or credential save occurred in these blocked attempts. Existing connected integrations remain untouched.
+
+### 2026-09-14 — Notion Preview callback configured
+
+- With explicit approval, added the stable Preview callback URI to the existing Notion OAuth connection without changing its prior callback, install scope, or capabilities. A reload of the Notion developer portal confirmed both callback URIs persist.
+- A fresh Preview OAuth attempt now reaches Notion's workspace/page-selection consent screen rather than the previous redirect URI error. Final installation remains pending an explicit selection of the user-approved test page(s) and action-time consent.
+- The user then authorized access to the named Notion testing space. The secure callback returned to Preview as `/connections?notion_connected=true`, and Connections rendered Notion as Connected. No Notion page was read or written as part of this verification.
+
+### 2026-09-14 — Slack least-privilege hardening in progress
+
+- The Slack action path uses the app's bot token for channel listing and message delivery; it does not use a user token. The Preview OAuth route now requests only the corresponding bot scopes and the callback stores no `authedUserToken`. The obsolete server action that accepted browser-provided Slack credentials was removed.
+- Added an additive Prisma migration which makes `Slack.authedUserToken` nullable. Existing Slack records and their existing bot tokens are preserved. Prisma format/validation/client generation and TypeScript checks passed; lint has only the pre-existing React-hook warnings. The optimized Next build compiled and reached its lint/type-validation stage.
+- Neon migration preparation identified an important scope mismatch: the plugin's temporary validation branch was created from the project default branch, not `codex-phase-1-foundation`. The one-column migration passed its temporary-branch nullability check, but it must **not** be applied through that prepared migration because it would target the wrong parent. No production or isolated Preview schema has changed in this pass. Apply the tracked migration only against the isolated branch using the normal Prisma migration ledger before a fresh Slack connection test.
+- The Slack app remains intentionally undistributed. The dedicated owner workspace can be used for Preview testing after adding the stable Preview callback URI and the minimum `chat:write` bot scope, then reinstalling there. Public distribution is not required for this isolated test and is deferred for a later multi-workspace release review.

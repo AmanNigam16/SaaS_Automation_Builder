@@ -26,7 +26,6 @@ export type ConnectionProviderProps = {
   slackNode: {
     appId: string
     authedUserId: string
-    authedUserToken: string
     slackAccessToken: string
     botUserId: string
     teamId: string
@@ -71,7 +70,6 @@ const InitialValues: ConnectionProviderProps = {
   slackNode: {
     appId: '',
     authedUserId: '',
-    authedUserToken: '',
     slackAccessToken: '',
     botUserId: '',
     teamId: '',

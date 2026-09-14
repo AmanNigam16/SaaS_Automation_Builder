@@ -130,7 +130,6 @@ export const onConnections = async (
       nodeConnection.setSlackNode({
         appId: connection.appId,
         authedUserId: connection.authedUserId,
-        authedUserToken: connection.authedUserToken,
         slackAccessToken: connection.slackAccessToken,
         botUserId: connection.botUserId,
         teamId: connection.teamId,

@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     await saveSlackConnection(userId, {
       appId: data.app_id ?? '',
       authedUserId: data.authed_user?.id ?? '',
-      authedUserToken: data.authed_user?.access_token ?? '',
+      authedUserToken: null,
       slackAccessToken: data.access_token,
       botUserId: data.bot_user_id ?? '',
       teamId: data.team.id,
