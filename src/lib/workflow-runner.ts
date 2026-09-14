@@ -37,6 +37,7 @@ type ExistingRunOptions = {
   runId: string
   startStepIndex: number
   nextAttemptByStep: Map<number, number>
+  reservedStepIndexes?: Set<number>
 }
 
 type ActionFailure = {
@@ -275,8 +276,15 @@ export const executeDurableWorkflowRun = async (
 
   if (existingRun) {
     const claimed = await db.workflowRun.updateMany({
-      where: { id: existingRun.runId, status: { in: ['FAILED', 'PAUSED'] } },
-      data: { status: 'RUNNING', error: null, finishedAt: null },
+      where: {
+        id: existingRun.runId,
+        status: { in: ['QUEUED', 'WAITING', 'FAILED', 'PAUSED'] },
+      },
+      data: {
+        status: 'RUNNING',
+        error: null,
+        finishedAt: null,
+      },
     })
 
     if (!claimed.count) return { status: 'unavailable' as const }
@@ -288,6 +296,7 @@ export const executeDurableWorkflowRun = async (
           workflowId: flow.id,
           triggerType: trigger.triggerType,
           triggerEventId: trigger.eventId,
+          status: 'QUEUED',
           input: trigger.metadata,
         },
         select: { id: true },
@@ -302,6 +311,13 @@ export const executeDurableWorkflowRun = async (
 
       throw error
     }
+
+    const claimed = await db.workflowRun.updateMany({
+      where: { id: run.id, status: 'QUEUED' },
+      data: { status: 'RUNNING' },
+    })
+
+    if (!claimed.count) return { status: 'unavailable' as const }
   }
 
   const startStepIndex = existingRun?.startStepIndex ?? 0
@@ -334,7 +350,9 @@ export const executeDurableWorkflowRun = async (
     try {
       const action = await prepareAction(flow, stepType)
 
-      const creditReserved = await reserveActionCredit(flow.userId)
+      const creditReserved = existingRun?.reservedStepIndexes?.has(stepIndex)
+        ? true
+        : await reserveActionCredit(flow.userId)
       if (!creditReserved) {
         await db.workflowStepRun.update({
           where: { id: stepRun.id },

@@ -131,10 +131,13 @@ model Workflows {
 }
 
 enum WorkflowRunStatus {
+  QUEUED
   RUNNING
+  WAITING
   SUCCEEDED
   FAILED
   PAUSED
+  CANCELLED
 }
 
 enum WorkflowStepStatus {

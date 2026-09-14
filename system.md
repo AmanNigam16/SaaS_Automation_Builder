@@ -547,3 +547,73 @@ Current position: **Phase 2 in progress**, with Phase 1 Google Drive connection 
 - Added an additive Prisma migration which makes `Slack.authedUserToken` nullable. Existing Slack records and their existing bot tokens are preserved. Prisma format/validation/client generation and TypeScript checks passed; lint has only the pre-existing React-hook warnings. The optimized Next build compiled and reached its lint/type-validation stage.
 - Neon migration preparation identified an important scope mismatch: the plugin's temporary validation branch was created from the project default branch, not `codex-phase-1-foundation`. The one-column migration passed its temporary-branch nullability check, but it must **not** be applied through that prepared migration because it would target the wrong parent. No production or isolated Preview schema has changed in this pass. Apply the tracked migration only against the isolated branch using the normal Prisma migration ledger before a fresh Slack connection test.
 - The Slack app remains intentionally undistributed. The dedicated owner workspace can be used for Preview testing after adding the stable Preview callback URI and the minimum `chat:write` bot scope, then reinstalling there. Public distribution is not required for this isolated test and is deferred for a later multi-workspace release review.
+
+### 2026-09-14 — Slack migration applied to isolated Preview branch
+
+- With explicit user approval, cancelled and deleted the plugin-created temporary migration branch because it had the project default branch as parent rather than the isolated `codex-phase-1-foundation` branch. No change was applied to that default/production-side branch.
+- Applied `ALTER TABLE "Slack" ALTER COLUMN "authedUserToken" DROP NOT NULL` only to Neon branch `codex-phase-1-foundation`, then recorded the exact checksum of tracked migration `20260914093000_make_slack_user_token_optional` in its Prisma migration ledger. Read-back verification confirms the column is nullable and the ledger row is complete.
+- **Production-release checklist:** when, and only when, the user approves the final merge/deploy to `main`, apply this same tracked Prisma migration to the production Neon database using a direct migration connection; preserve the existing production Slack callback URI; add/retain the deployed production callback URI; and perform a controlled production Slack reconnect to issue a bot token under the hardened flow. Preview-only callback URIs, Preview database state, and test installations do not become production configuration automatically.
+
+### 2026-09-14 — Slack Preview redirect validation blocker
+
+- Slack's OAuth settings accept the existing production Vercel callback, but reject both tested `*.vercel.app` Preview callback hosts locally with **“Please use a valid redirect URL”** before the URL can be added or saved. A benign control URL validates, so this is a Slack redirect-host policy/validation limitation rather than a malformed callback path, Next.js middleware response, or Vercel runtime error. The unsaved test input was cancelled; no Slack setting was modified.
+- A protected Vercel Preview share link is not an appropriate OAuth redirect solution: it is temporary and cookie-based, while OAuth requires a stable, exact callback URI. Disabling Preview protection would not resolve the observed Slack URL validator and would unnecessarily expose the Preview.
+- To complete an isolated Slack OAuth test, use an owned stable HTTPS subdomain (for example `preview.<owned-domain>`) mapped to the Preview deployment, then add that exact callback URI, add the already-required `chat:write` bot scope, and reinstall only in the existing owner test workspace. All three provider-console changes require user confirmation immediately before saving. This remains Preview-only; the production callback will be configured separately at final release.
+
+### 2026-09-14 — Stable Preview domain validated
+
+- Vercel now has `preview.blogs.amannigam.me` bound **only** to the `codex/phase-1-foundation` Preview environment. It is not bound to Production or `main`.
+- With explicit user approval, added the Namecheap CNAME `preview.blogs` -> `9580de4d0030bd46.vercel-dns-017.com.`. Existing apex, `www`, and `blogs` DNS records were preserved.
+- With explicit user approval, added the required `_vercel` TXT ownership-verification record. Both Namecheap records are visibly present, and Vercel now reports `preview.blogs.amannigam.me` as **Valid Configuration** for `codex/phase-1-foundation`.
+- No `NEXT_PUBLIC_URL` change was made: all provider connect and callback routes pass the live request origin into `getCallbackUrl`, so the verified Preview hostname is selected directly and a redundant environment override could instead make callback selection less robust.
+
+### 2026-09-14 — Google stable Preview callback configured
+
+- With explicit user approval, added `https://preview.blogs.amannigam.me/api/auth/callback/google` to the existing Fuzzie Google OAuth client. The Clerk, production, localhost, and prior ephemeral Preview callback URIs were preserved.
+- A Google Cloud console reload shows the new URI persisted. Google warns that redirect configuration propagation may take from several minutes to a few hours; do not treat OAuth runtime testing as conclusive until that propagation window has elapsed.
+
+### 2026-09-14 — Slack Preview callback remains blocked by Vercel protection
+
+- Slack rejected the stable `https://preview.blogs.amannigam.me/api/auth/callback/slack` before it could be added, so no Slack redirect URL or scope was changed.
+- A direct HTTPS check shows the Preview hostname returns a `302` to Vercel SSO protection instead of reaching the callback route. Slack's documented OAuth flow requires a public HTTPS redirect URI; this is the remaining concrete blocker, not the URL syntax, the OAuth callback code, or application middleware.
+- The safe next step is a temporary Preview-only Vercel Deployment Protection change so provider redirects can reach the isolated Preview deployment, followed by immediate restore after provider verification. Never alter Production protection or use this state for production callbacks.
+
+### 2026-09-14 — Narrow stable Preview protection exception applied
+
+- With explicit user approval, added Vercel's Deployment Protection Exception for **only** `preview.blogs.amannigam.me`. Other Preview URLs and Production protection remain unchanged.
+- A direct callback check now reaches Fuzzie and returns its expected state-missing `307` redirect to Connections, rather than the prior Vercel SSO `302`. This confirms OAuth providers can reach the app callback. The exception must be removed after the Preview OAuth verification work is complete.
+
+### 2026-09-14 — Slack redirect validator hostname constraint
+
+- Slack still rejected `preview.blogs.amannigam.me` even after Vercel SSO protection was removed. An unsaved control check accepted `blogs.amannigam.me`, establishing that Slack's current validator rejects the nested Preview hostname rather than the HTTPS scheme, callback path, or live callback reachability.
+- No Slack redirect URL or scope was saved. The viable stable Preview hostname is `preview.amannigam.me` (a single-label subdomain), to be added to Vercel and Namecheap as a separate Preview-only alias before resuming Slack OAuth configuration. Keep `preview.blogs.amannigam.me` available only until the replacement is verified, then remove its Vercel public-protection exception and later its DNS records with explicit approval.
+
+### 2026-09-14 — Replacement Slack-compatible Preview domain validated
+
+- The user configured `preview.amannigam.me`; Vercel confirms it is **Valid Configuration** and bound only to `codex/phase-1-foundation`. Existing root, blog, older Preview, and production domain bindings were not changed.
+- With explicit user approval, added Vercel's Deployment Protection Exception for **only** `preview.amannigam.me`. A direct callback check returns Fuzzie's expected safe `307`, not Vercel SSO. Do not make it public broadly; later remove both old and replacement exceptions after Preview OAuth verification.
+
+### 2026-09-14 — Slack hostname-validator diagnosis refined
+
+- Slack's OAuth-settings form reproducibly displays **“Please use a valid redirect URL”** for `https://preview.amannigam.me/api/auth/callback/slack`. Two unsaved neutral controls (`fuzzie.amannigam.me` and `app.amannigam.me`) do not show that error, despite not being configured in DNS. This is an observed form-validation discrepancy only; it does **not** establish a Slack policy against `preview` labels. Slack's public documentation specifies HTTPS and matching behavior, and web research found no documented label restriction or matching public issue.
+- All control inputs were cancelled immediately; no Slack redirect URL, OAuth scope, installation, token, or provider permission was changed.
+- Do not create another hostname based only on this diagnosis. The next investigation should determine whether Slack's settings UI/session is faulty, whether the form's server-side save produces a more specific error, or whether a Slack support/manifest route is needed. Any persistent test must be explicitly approved first.
+
+### 2026-09-14 — Preview public-access cleanup
+
+- The user removed the redundant `preview.blogs.amannigam.me` Vercel domain binding, its matching Namecheap CNAME/TXT verification records, and its Google OAuth callback URI. The earlier ephemeral branch-Preview Google callback URI was also removed. These removals affect no Production domain, callback, or deployment.
+- With explicit approval, removed the remaining Vercel Deployment Protection Exception for `preview.amannigam.me`. The exception table is now empty and Vercel Authentication remains Standard Protection; no Production setting changed.
+- `preview.amannigam.me` itself remains bound exclusively to `codex/phase-1-foundation` for future protected Preview work. Its DNS, branch-scoped Preview `DATABASE_URL`, isolated Neon branch, and provider connection records are deliberately retained.
+- With explicit user approval, deleted the 12 isolated `Google Drive` workflow-run test records from 2026-09-13. Their 9 dependent step-run records cascaded with the parent rows; read-back verified zero remaining test runs and zero step-run rows. No workflow, provider connection, credential, production row, or production branch was changed.
+- With explicit user approval, permanently deleted the single blank Google Drive test document `Fuzzie Protected Preview Drive Test — 2026-09-14`. No other Drive file, credential, provider connection, workflow, or production resource was changed.
+- Read-only post-cleanup provider review: Slack retains only its pre-existing production callback; no Preview callback, scope, reinstall, token rotation, PKCE setting, token, or Slack workspace permission was changed during this work. Notion still has the former ephemeral branch-Preview callback URI configured and requires a separate explicit deletion confirmation. Discord could not be reviewed because the Developer Portal session required login; no Discord setting was changed.
+- Do not revoke provider grants, delete provider connection records, remove the retained `preview.amannigam.me` domain/DNS, or delete the isolated Neon branch as part of this cleanup unless the user explicitly requests it.
+
+### 2026-09-14 — Minimal durable-run state foundation
+
+- Added the minimal run states required for reliable scheduling and cancellation: `QUEUED`, `WAITING`, and `CANCELLED`. New durable runs are first written as `QUEUED` and atomically claimed as `RUNNING`, so an unclaimed row remains visible and recoverable instead of being represented as in-progress.
+- Updated Logs to render these states and allow a queued run to be claimed through the existing owner-scoped retry control. Existing provider actions, credit reservation, workflow records, and UI layout were not redesigned.
+- Applied tracked migration `20260914113000_add_durable_run_states` only to Neon branch `codex-phase-1-foundation`, then recorded its exact source checksum in the Prisma migration ledger. Read-back confirmed all seven run states and the completed ledger row. Production and `main` remain untouched.
+- Manual recovery now reuses a prior reservation for the same failed action step, rather than deducting a second credit when retrying it. This preserves the existing cautious manual-retry policy for timeouts, rate limits, and other provider failures.
+- Deliberately did **not** add a background automatic-retry worker: Vercel Cron cannot exercise it on Preview and sub-daily schedules require a paid Vercel plan. An unscheduled worker would be misleading. Automatic exponential backoff and restart-driven execution therefore remain intentionally deferred rather than partially implemented.
+- Verified Prisma format/client generation, TypeScript `--noEmit`, and lint. Lint still has only the repository's existing React Hook dependency warnings.

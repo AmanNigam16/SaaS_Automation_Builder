@@ -2,7 +2,15 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { currentUser } from '@clerk/nextjs'
-import { AlertTriangle, CircleCheck, CircleX, LoaderCircle, PauseCircle } from 'lucide-react'
+import {
+  AlertTriangle,
+  CircleCheck,
+  CircleX,
+  Clock3,
+  LoaderCircle,
+  PauseCircle,
+  XCircle,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -16,6 +24,11 @@ import { cn } from '@/lib/utils'
 import { RetryRunButton } from './_components/retry-run-button'
 
 const statusDetails = {
+  QUEUED: {
+    label: 'Queued',
+    icon: Clock3,
+    className: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
+  },
   RUNNING: {
     label: 'Running',
     icon: LoaderCircle,
@@ -35,6 +48,16 @@ const statusDetails = {
     label: 'Paused',
     icon: PauseCircle,
     className: 'border-orange-500/30 bg-orange-500/10 text-orange-500',
+  },
+  WAITING: {
+    label: 'Waiting',
+    icon: Clock3,
+    className: 'border-orange-500/30 bg-orange-500/10 text-orange-500',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    icon: XCircle,
+    className: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
   },
 } as const
 
@@ -115,7 +138,7 @@ const LogsPage = async () => {
                       <StatusIcon className="h-3.5 w-3.5" />
                       {details.label}
                     </Badge>
-                    {(run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
+                    {(run.status === 'QUEUED' || run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
                       <RetryRunButton runId={run.id} />
                     )}
                   </div>

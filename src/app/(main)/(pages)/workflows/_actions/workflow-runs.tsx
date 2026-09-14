@@ -57,8 +57,17 @@ export const retryWorkflowRun = async (runId: string) => {
   const isStaleRunning =
     run.status === 'RUNNING' &&
     Date.now() - run.startedAt.getTime() > STALE_RUN_MS
-  if (!(run.status === 'FAILED' || run.status === 'PAUSED' || isStaleRunning)) {
-    return { message: 'Only failed, paused, or interrupted runs can be retried' }
+  if (
+    !(
+      run.status === 'QUEUED' ||
+      run.status === 'FAILED' ||
+      run.status === 'PAUSED' ||
+      isStaleRunning
+    )
+  ) {
+    return {
+      message: 'Only queued, failed, paused, or interrupted runs can be retried',
+    }
   }
 
   if (isStaleRunning) {
@@ -72,6 +81,7 @@ export const retryWorkflowRun = async (runId: string) => {
   const steps = parseFlowSteps(run.workflow.flowPath)
   const latestStepByIndex = new Map<number, (typeof run.steps)[number]>()
   const nextAttemptByStep = new Map<number, number>()
+  const reservedStepIndexes = new Set<number>()
 
   for (const step of run.steps) {
     if (!latestStepByIndex.has(step.stepIndex)) {
@@ -81,6 +91,7 @@ export const retryWorkflowRun = async (runId: string) => {
       step.stepIndex,
       Math.max(nextAttemptByStep.get(step.stepIndex) ?? 1, step.attempt + 1)
     )
+    if (step.creditCharged) reservedStepIndexes.add(step.stepIndex)
   }
 
   const startStepIndex = steps.findIndex(
@@ -100,6 +111,7 @@ export const retryWorkflowRun = async (runId: string) => {
       runId: run.id,
       startStepIndex,
       nextAttemptByStep,
+      reservedStepIndexes,
     }
   )
 
