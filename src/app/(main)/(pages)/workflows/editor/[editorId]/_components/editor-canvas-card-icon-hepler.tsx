@@ -11,6 +11,8 @@ import {
   Plus,
   Slack,
   Timer,
+  Repeat2,
+  TextCursorInput,
   Webhook,
   Zap,
 } from 'lucide-react'
@@ -97,6 +99,10 @@ const EditorCanvasIconHelper = ({ type }: Props) => {
           size={30}
         />
       )
+    case 'Formatter':
+      return <TextCursorInput className="flex-shrink-0" size={30} />
+    case 'Loop':
+      return <Repeat2 className="flex-shrink-0" size={30} />
     default:
       return (
         <Zap

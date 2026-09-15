@@ -30,18 +30,21 @@ export type EditorCanvasTypes =
   | 'Slack'
   | 'Google Drive'
   | 'Notion'
+  | 'Discord'
   | 'Custom Webhook'
   | 'Google Calendar'
   | 'Trigger'
   | 'Action'
   | 'Wait'
+  | 'Formatter'
+  | 'Loop'
 
 export type EditorCanvasCardType = {
   title: string
   description: string
   completed: boolean
   current: boolean
-  metadata: any
+  metadata: import('./workflow-semantics').WorkflowNodeConfig
   type: EditorCanvasTypes
 }
 
@@ -66,6 +69,7 @@ export type EditorActions =
           id: string
           source: string
           target: string
+          sourceHandle?: string | null
         }[]
       }
     }

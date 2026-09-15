@@ -5,6 +5,18 @@ import { db } from '@/lib/db'
 import { postContentToWebHook } from '@/app/(main)/(pages)/connections/_actions/discord-connection'
 import { onCreateNewPageInDatabase } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
 import { postMessageToSlack } from '@/app/(main)/(pages)/connections/_actions/slack-connection'
+import {
+  applyFormatter,
+  evaluateCondition,
+  getWaitUntil,
+  parseWorkflowPlan,
+  resolveExpression,
+  type WorkflowContext,
+  type WorkflowNodeConfig,
+  type WorkflowPlan,
+  type WorkflowPlanNode,
+  type WorkflowValue,
+} from '@/lib/workflow-semantics'
 
 type WorkflowRecord = {
   id: string
@@ -41,6 +53,18 @@ type ExistingRunOptions = {
   reservedStepIndexes?: Set<number>
   retryCount?: number
   alreadyClaimed?: boolean
+  executionState?: WorkflowExecutionState
+}
+
+export type WorkflowExecutionItem = {
+  nodeId: string
+  context: WorkflowContext
+}
+
+export type WorkflowExecutionState = {
+  version: 1
+  queue: WorkflowExecutionItem[]
+  nextStepIndex: number
 }
 
 type ActionFailure = {
@@ -112,9 +136,17 @@ const getActionFailure = (error: unknown, stepType: string): ActionFailure => {
   }
 }
 
-const prepareAction = async (flow: WorkflowRecord, step: string) => {
+const prepareAction = async (
+  flow: WorkflowRecord,
+  step: string,
+  context?: WorkflowContext,
+  config: WorkflowNodeConfig = {}
+) => {
   if (step === 'Discord') {
-    if (!flow.discordTemplate) throw new Error('Discord template is missing')
+    const template = config.template
+      ? String(resolveExpression(config.template, context!))
+      : flow.discordTemplate
+    if (!template) throw new Error('Discord template is missing')
 
     const discordMessage = await db.discordWebhook.findFirst({
       where: { userId: flow.userId },
@@ -124,14 +156,17 @@ const prepareAction = async (flow: WorkflowRecord, step: string) => {
     if (!discordMessage) throw new Error('Discord connection is missing')
 
     return async () => {
-      await postContentToWebHook(flow.discordTemplate!, discordMessage.url)
+      await postContentToWebHook(template, discordMessage.url)
     }
   }
 
   if (step === 'Slack') {
+    const template = config.template
+      ? String(resolveExpression(config.template, context!))
+      : flow.slackTemplate
     if (
       !flow.slackAccessToken ||
-      !flow.slackTemplate ||
+      !template ||
       !flow.slackChannels.length
     ) {
       throw new Error('Slack configuration is incomplete')
@@ -146,21 +181,24 @@ const prepareAction = async (flow: WorkflowRecord, step: string) => {
       await postMessageToSlack(
         flow.slackAccessToken!,
         channels,
-        flow.slackTemplate!
+        template
       )
     }
   }
 
   if (step === 'Notion') {
+    const template = config.template
+      ? String(resolveExpression(config.template, context!))
+      : flow.notionTemplate
     if (
       !flow.notionDbId ||
       !flow.notionAccessToken ||
-      !flow.notionTemplate
+      !template
     ) {
       throw new Error('Notion configuration is incomplete')
     }
 
-    const content = JSON.parse(flow.notionTemplate)
+    const content = JSON.parse(template)
     return async () => {
       await onCreateNewPageInDatabase(
         flow.notionDbId!,
@@ -176,6 +214,23 @@ const prepareAction = async (flow: WorkflowRecord, step: string) => {
 const executeAction = async (flow: WorkflowRecord, step: string) => {
   const action = await prepareAction(flow, step)
   await action()
+}
+
+const asWorkflowValue = (value: Prisma.InputJsonValue | undefined): Record<string, WorkflowValue> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, WorkflowValue>)
+    : {}
+
+export const parseWorkflowExecutionState = (
+  value: Prisma.JsonValue | null | undefined
+): WorkflowExecutionState | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const execution = (value as Record<string, Prisma.JsonValue>).execution
+  if (!execution || typeof execution !== 'object' || Array.isArray(execution)) return null
+  const state = execution as unknown as WorkflowExecutionState
+  return state.version === 1 && Array.isArray(state.queue) && Number.isInteger(state.nextStepIndex)
+    ? state
+    : null
 }
 
 const reserveActionCredit = async (clerkUserId: string) => {
@@ -277,12 +332,71 @@ const scheduleWorkflowRetry = async ({
   return { jobId: jobId as number, resumeTokenHash, scheduledAt }
 }
 
+const scheduleWorkflowWait = async ({
+  runId,
+  resumeAt,
+  baseUrl,
+}: {
+  runId: string
+  resumeAt: Date
+  baseUrl?: string
+}) => {
+  if (!process.env.CRON_JOB_KEY || !baseUrl || !isPublicProductionUrl(baseUrl)) {
+    return null
+  }
+
+  const scheduledAt = new Date(resumeAt)
+  scheduledAt.setUTCSeconds(0, 0)
+  if (scheduledAt <= new Date()) scheduledAt.setUTCMinutes(scheduledAt.getUTCMinutes() + 1)
+  const resumeToken = randomBytes(32).toString('hex')
+  const resumeTokenHash = createHash('sha256').update(resumeToken).digest('hex')
+  const response = await axios.put(
+    'https://api.cron-job.org/jobs',
+    {
+      job: {
+        enabled: true,
+        title: `Workflow wait ${runId}`,
+        saveResponses: false,
+        url: `${normalizeBaseUrl(baseUrl)}/api/cron/workflow-resume?run_id=${encodeURIComponent(runId)}`,
+        requestMethod: 0,
+        extendedData: { headers: { 'X-Workflow-Resume-Token': resumeToken } },
+        schedule: {
+          timezone: 'UTC',
+          expiresAt: formatCronDate(new Date(scheduledAt.getTime() + 2 * 60_000)),
+          hours: [scheduledAt.getUTCHours()],
+          mdays: [scheduledAt.getUTCDate()],
+          minutes: [scheduledAt.getUTCMinutes()],
+          months: [scheduledAt.getUTCMonth() + 1],
+          wdays: [-1],
+        },
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.CRON_JOB_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10_000,
+    }
+  )
+  const jobId = response.data.jobId
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) {
+    throw new Error('Cron scheduler returned an invalid job ID')
+  }
+  return { jobId: jobId as number, resumeTokenHash, scheduledAt }
+}
+
 export const parseFlowSteps = (value: string | null | undefined) => {
   if (!value) return []
 
+  const plan = parseWorkflowPlan(value)
+  if (plan) return plan
+
   try {
     const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed) && parsed.every((step) => typeof step === 'string')
+      ? parsed
+      : []
   } catch {
     return []
   }
@@ -353,9 +467,266 @@ export const verifyWorkflowResumeToken = (
   return timingSafeEqual(actual, Buffer.from(expectedHash, 'hex'))
 }
 
+const executePlannedWorkflowRun = async ({
+  flow,
+  plan,
+  runId,
+  trigger,
+  existingRun,
+}: {
+  flow: WorkflowRecord
+  plan: WorkflowPlan
+  runId: string
+  trigger: DurableRunInput
+  existingRun?: ExistingRunOptions
+}) => {
+  const nodeById = new Map(plan.nodes.map((node) => [node.id, node]))
+  const outgoing = (nodeId: string, branch?: 'true' | 'false') =>
+    plan.edges.filter(
+      (edge) =>
+        edge.source === nodeId &&
+        (branch === undefined || edge.branch === branch || edge.branch === undefined)
+    )
+
+  const baseContext: WorkflowContext = {
+    trigger: asWorkflowValue(trigger.metadata),
+    steps: {},
+  }
+  const state: WorkflowExecutionState = existingRun?.executionState ?? {
+    version: 1,
+    queue: outgoing(plan.triggerId).map((edge) => ({
+      nodeId: edge.target,
+      context: baseContext,
+    })),
+    nextStepIndex: 0,
+  }
+
+  const persistState = () =>
+    db.workflowRun.update({
+      where: { id: runId },
+      data: { output: { execution: state } as unknown as Prisma.InputJsonValue },
+    })
+
+  const completeStep = async (
+    stepRunId: string,
+    node: WorkflowPlanNode,
+    item: WorkflowExecutionItem,
+    output: Record<string, WorkflowValue>
+  ) => {
+    item.context.steps[node.id] = output
+    await db.workflowStepRun.update({
+      where: { id: stepRunId },
+      data: {
+        status: 'SUCCEEDED',
+        output: output as Prisma.InputJsonValue,
+        finishedAt: new Date(),
+      },
+    })
+  }
+
+  const enqueue = (
+    node: WorkflowPlanNode,
+    context: WorkflowContext,
+    branch?: 'true' | 'false'
+  ) => {
+    for (const edge of outgoing(node.id, branch)) {
+      state.queue.push({
+        nodeId: edge.target,
+        context: structuredClone(context),
+      })
+    }
+  }
+
+  while (state.queue.length) {
+    const item = state.queue.shift()!
+    const node = nodeById.get(item.nodeId)
+    if (!node) throw new Error('Workflow plan references a missing node')
+    const stepIndex = state.nextStepIndex++
+    const stepRun = await db.workflowStepRun.create({
+      data: {
+        workflowRunId: runId,
+        stepIndex,
+        stepType: node.type,
+        attempt: existingRun?.nextAttemptByStep.get(stepIndex) ?? 1,
+        input: {
+          nodeId: node.id,
+          config: node.config,
+          context: item.context,
+        } as unknown as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    })
+
+    try {
+      if (node.type === 'Condition') {
+        const matched = evaluateCondition(node.config, item.context)
+        await completeStep(stepRun.id, node, item, { matched })
+        if ((node.config.conditionMode ?? 'branch') === 'branch') {
+          enqueue(node, item.context, matched ? 'true' : 'false')
+        } else if (matched) {
+          enqueue(node, item.context, 'true')
+        }
+        await persistState()
+        continue
+      }
+
+      if (node.type === 'Formatter') {
+        const result = applyFormatter(node.config, item.context)
+        await completeStep(stepRun.id, node, item, { result })
+        enqueue(node, item.context)
+        await persistState()
+        continue
+      }
+
+      if (node.type === 'Loop') {
+        const resolved = resolveExpression(node.config.items ?? '', item.context)
+        if (!Array.isArray(resolved)) throw new Error('Loop input must resolve to a list')
+        const maxItems = Math.min(Math.max(node.config.maxItems ?? 25, 1), 100)
+        const items = resolved.slice(0, maxItems)
+        await completeStep(stepRun.id, node, item, { items, count: items.length })
+        const nextEdges = outgoing(node.id)
+        for (let index = 0; index < items.length; index++) {
+          const loopItem = items[index]
+          for (const edge of nextEdges) {
+            state.queue.push({
+              nodeId: edge.target,
+              context: structuredClone({
+                ...item.context,
+                loop: { item: loopItem, index, items },
+              }),
+            })
+          }
+        }
+        await persistState()
+        continue
+      }
+
+      if (node.type === 'Wait') {
+        const resumeAt = getWaitUntil(node.config)
+        await completeStep(stepRun.id, node, item, {
+          resumedAt: resumeAt.toISOString(),
+        })
+        enqueue(node, item.context)
+        let scheduled: Awaited<ReturnType<typeof scheduleWorkflowWait>> = null
+        try {
+          scheduled = await scheduleWorkflowWait({
+            runId,
+            resumeAt,
+            baseUrl: trigger.baseUrl,
+          })
+          await db.workflowRun.update({
+            where: { id: runId },
+            data: {
+              status: 'WAITING',
+              error: null,
+              retryAt: scheduled?.scheduledAt ?? resumeAt,
+              retryJobId: scheduled?.jobId,
+              retryTokenHash: scheduled?.resumeTokenHash,
+              output: { execution: state } as unknown as Prisma.InputJsonValue,
+            },
+          })
+        } catch (error) {
+          if (scheduled?.jobId) await deleteScheduledJob(scheduled.jobId).catch(() => undefined)
+          const message = error instanceof Error ? error.message : 'Wait scheduling failed'
+          await db.workflowRun.update({
+            where: { id: runId },
+            data: {
+              status: 'FAILED',
+              error: message,
+              output: { execution: state } as unknown as Prisma.InputJsonValue,
+              finishedAt: new Date(),
+            },
+          })
+          return { status: 'failed' as const, runId }
+        }
+        return { status: 'waiting' as const, runId, retryAt: resumeAt }
+      }
+
+      const action = await prepareAction(flow, node.type, item.context, node.config)
+      const creditReserved = existingRun?.reservedStepIndexes?.has(stepIndex)
+        ? true
+        : await reserveActionCredit(flow.userId)
+      if (!creditReserved) throw new Error('No credits are available for this action')
+      await db.workflowStepRun.update({
+        where: { id: stepRun.id },
+        data: { creditCharged: true },
+      })
+      await action()
+      await completeStep(stepRun.id, node, item, { message: 'Action completed' })
+      enqueue(node, item.context)
+      await persistState()
+    } catch (error) {
+      const failure =
+        error instanceof Error && error.message === 'No credits are available for this action'
+          ? { message: error.message, retryable: false, errorCode: 'NO_CREDITS' }
+          : getActionFailure(error, node.type)
+      state.nextStepIndex = stepIndex
+      state.queue.unshift(item)
+      const retryDelayMs =
+        failure.errorCode === 'RATE_LIMITED'
+          ? getRetryDelayMs(existingRun?.retryCount ?? 0)
+          : null
+      if (retryDelayMs !== null && trigger.baseUrl) {
+        const retryAt = new Date(Date.now() + retryDelayMs)
+        const scheduled = await scheduleWorkflowRetry({
+          runId,
+          retryAt,
+          baseUrl: trigger.baseUrl,
+        }).catch(() => null)
+        if (scheduled) {
+          try {
+            await db.$transaction([
+              db.workflowStepRun.update({
+                where: { id: stepRun.id },
+                data: { status: 'FAILED', error: failure.message, errorCode: failure.errorCode, retryable: true, finishedAt: new Date() },
+              }),
+              db.workflowRun.update({
+                where: { id: runId },
+                data: {
+                  status: 'WAITING',
+                  error: failure.message,
+                  retryAt: scheduled.scheduledAt,
+                  retryCount: { increment: 1 },
+                  retryJobId: scheduled.jobId,
+                  retryTokenHash: scheduled.resumeTokenHash,
+                  output: { execution: state } as unknown as Prisma.InputJsonValue,
+                },
+              }),
+            ])
+            return { status: 'waiting' as const, runId, retryAt: scheduled.scheduledAt }
+          } catch {
+            await deleteScheduledJob(scheduled.jobId).catch(() => undefined)
+          }
+        }
+      }
+      await db.$transaction([
+        db.workflowStepRun.update({
+          where: { id: stepRun.id },
+          data: { status: 'FAILED', error: failure.message, errorCode: failure.errorCode, retryable: failure.retryable, finishedAt: new Date() },
+        }),
+        db.workflowRun.update({
+          where: { id: runId },
+          data: { status: 'FAILED', error: failure.message, output: { execution: state } as unknown as Prisma.InputJsonValue, finishedAt: new Date() },
+        }),
+      ])
+      return { status: 'failed' as const, runId }
+    }
+  }
+
+  await db.workflowRun.update({
+    where: { id: runId },
+    data: {
+      status: 'SUCCEEDED',
+      output: { completedSteps: state.nextStepIndex, execution: state } as unknown as Prisma.InputJsonValue,
+      finishedAt: new Date(),
+    },
+  })
+  return { status: 'succeeded' as const, runId }
+}
+
 export const executeDurableWorkflowRun = async (
   flow: WorkflowRecord,
-  steps: string[],
+  steps: string[] | WorkflowPlan,
   trigger: DurableRunInput,
   existingRun?: ExistingRunOptions
 ) => {
@@ -413,6 +784,16 @@ export const executeDurableWorkflowRun = async (
   }
 
   const startStepIndex = existingRun?.startStepIndex ?? 0
+
+  if (!Array.isArray(steps)) {
+    return executePlannedWorkflowRun({
+      flow,
+      plan: steps,
+      runId: run.id,
+      trigger,
+      existingRun,
+    })
+  }
 
   if (!steps.length || startStepIndex >= steps.length) {
     await db.workflowRun.update({
@@ -493,7 +874,7 @@ export const executeDurableWorkflowRun = async (
           runId: run.id,
           retryAt,
           baseUrl: trigger.baseUrl,
-        })
+        }).catch(() => null)
 
         if (scheduled) {
           try {

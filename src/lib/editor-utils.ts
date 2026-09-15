@@ -1,10 +1,8 @@
 import { ConnectionProviderProps } from '@/providers/connections-provider'
 import { EditorCanvasCardType } from './types'
-import { EditorState } from '@/providers/editor-provider'
 import { getDiscordConnectionUrl } from '@/app/(main)/(pages)/connections/_actions/discord-connection'
 import {
   getNotionConnection,
-  getNotionDatabase,
 } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
 import {
   getSlackConnection,
@@ -88,10 +86,10 @@ export const onAddTemplate = (
 
 export const onConnections = async (
   nodeConnection: ConnectionProviderProps,
-  editorState: EditorState,
+  selectedTitle: string,
   googleFile: any
 ) => {
-  if (editorState.editor.selectedNode.data.title == 'Discord') {
+  if (selectedTitle === 'Discord') {
     const connection = await getDiscordConnectionUrl()
     if (connection) {
       nodeConnection.setDiscordNode({
@@ -102,7 +100,7 @@ export const onConnections = async (
       })
     }
   }
-  if (editorState.editor.selectedNode.data.title == 'Notion') {
+  if (selectedTitle === 'Notion') {
     const connection = await getNotionConnection()
     if (connection) {
       nodeConnection.setNotionNode({
@@ -115,16 +113,9 @@ export const onConnections = async (
           type: googleFile.mimeType,
         },
       })
-
-      if (nodeConnection.notionNode.databaseId !== '') {
-        const response = await getNotionDatabase(
-          nodeConnection.notionNode.databaseId,
-          nodeConnection.notionNode.accessToken
-        )
-      }
     }
   }
-  if (editorState.editor.selectedNode.data.title == 'Slack') {
+  if (selectedTitle === 'Slack') {
     const connection = await getSlackConnection()
     if (connection) {
       nodeConnection.setSlackNode({

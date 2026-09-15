@@ -13,10 +13,14 @@ test('accepts a connected linear supported workflow', () => {
     JSON.stringify([{ source: 'trigger', target: 'slack' }])
   )
 
-  assert.deepEqual(result, { valid: true, steps: ['Slack'] })
+  assert.equal(result.valid, true)
+  if (result.valid) {
+    assert.deepEqual(result.steps, ['Slack'])
+    assert.equal(result.plan.triggerId, 'trigger')
+  }
 })
 
-test('rejects unsupported nodes and branches', () => {
+test('rejects unsupported nodes and branching from ordinary actions', () => {
   const unsupported = validateLinearWorkflowGraph(
     JSON.stringify([
       { id: 'trigger', type: 'Google Drive' },
@@ -42,6 +46,37 @@ test('rejects unsupported nodes and branches', () => {
   )
   assert.deepEqual(branching, {
     valid: false,
-    message: 'Branching and merged paths are not executable yet',
+    message: 'Only Condition nodes can create branches',
   })
+})
+
+test('compiles explicit true and false condition paths', () => {
+  const result = validateLinearWorkflowGraph(
+    JSON.stringify([
+      { id: 'trigger', type: 'Google Drive', data: { metadata: {} } },
+      {
+        id: 'condition',
+        type: 'Condition',
+        data: {
+          metadata: {
+            conditionMode: 'branch',
+            combinator: 'and',
+            conditions: [{ field: 'trigger.mimeType', operator: 'contains', value: 'pdf' }],
+          },
+        },
+      },
+      { id: 'slack', type: 'Slack', data: { metadata: {} } },
+      { id: 'notion', type: 'Notion', data: { metadata: {} } },
+    ]),
+    JSON.stringify([
+      { id: 'a', source: 'trigger', target: 'condition' },
+      { id: 'b', source: 'condition', sourceHandle: 'true', target: 'slack' },
+      { id: 'c', source: 'condition', sourceHandle: 'false', target: 'notion' },
+    ])
+  )
+
+  assert.equal(result.valid, true)
+  if (result.valid) {
+    assert.deepEqual(result.plan.edges.map((edge) => edge.branch), [undefined, 'true', 'false'])
+  }
 })

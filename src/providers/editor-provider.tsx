@@ -17,6 +17,7 @@ export type Editor = {
     id: string
     source: string
     target: string
+    sourceHandle?: string | null
   }[]
   selectedNode: EditorNodeType
 }
@@ -105,6 +106,22 @@ const editorReducer = (
           edges: action.payload.edges,
         },
       }
+    case 'UPDATE_NODE': {
+      const editor = {
+        ...state.editor,
+        elements: action.payload.elements,
+        selectedNode:
+          action.payload.elements.find(
+            (node) => node.id === state.editor.selectedNode.id
+          ) ?? state.editor.selectedNode,
+      }
+      const history = state.history.history.slice(0, state.history.currentIndex + 1)
+      history.push(editor)
+      return {
+        editor,
+        history: { history, currentIndex: history.length - 1 },
+      }
+    }
     case 'SELECTED_ELEMENT':
       return {
         ...state,

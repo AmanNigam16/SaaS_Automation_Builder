@@ -117,6 +117,8 @@ const LogsPage = async () => {
             const unconfirmed = isStaleRunning(run.status, run.startedAt)
             const details = unconfirmed ? unconfirmedDetails : statusDetails[run.status]
             const StatusIcon = details.icon
+            const lastStep = run.steps[run.steps.length - 1]
+            const waitingForDelay = run.status === 'WAITING' && lastStep?.stepType === 'Wait'
 
             return (
               <Card key={run.id}>
@@ -139,7 +141,7 @@ const LogsPage = async () => {
                       {details.label}
                     </Badge>
                     {(run.status === 'QUEUED' || run.status === 'WAITING' || run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
-                      <RetryRunButton runId={run.id} />
+                      <RetryRunButton runId={run.id} resume={waitingForDelay} />
                     )}
                   </div>
                   {run.error && (
@@ -147,7 +149,7 @@ const LogsPage = async () => {
                   )}
                   {run.status === 'WAITING' && run.retryAt && (
                     <p className="text-sm text-muted-foreground">
-                      A rate-limited action is scheduled to retry after{' '}
+                      {waitingForDelay ? 'Workflow will resume after ' : 'A rate-limited action is scheduled to retry after '}
                       {formatDate(run.retryAt)}.
                     </p>
                   )}

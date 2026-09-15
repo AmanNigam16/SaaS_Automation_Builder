@@ -26,7 +26,7 @@ export const onCreateNodesEdges = async (
     data: {
       nodes,
       edges,
-      flowPath: JSON.stringify(graph.valid ? graph.steps : []),
+      flowPath: JSON.stringify(graph.valid ? graph.plan : []),
     },
   })
 
@@ -54,7 +54,7 @@ export const onFlowPublish = async (workflowId: string, state: boolean) => {
     data: {
       publish: state,
       ...(validation?.valid
-        ? { flowPath: JSON.stringify(validation.steps) }
+        ? { flowPath: JSON.stringify(validation.plan) }
         : {}),
     },
   })

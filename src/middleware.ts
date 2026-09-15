@@ -15,6 +15,7 @@ export default authMiddleware({
     '/api/flow',
     '/api/cron/wait',
     '/api/cron/workflow-retry',
+    '/api/cron/workflow-resume',
   ],
 })
 

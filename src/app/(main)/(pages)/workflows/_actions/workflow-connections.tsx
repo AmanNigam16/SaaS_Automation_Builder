@@ -58,7 +58,7 @@ export const onFlowPublish = async (workflowId: string, state: boolean) => {
     data: {
       publish: state,
       ...(validation?.valid
-        ? { flowPath: JSON.stringify(validation.steps) }
+        ? { flowPath: JSON.stringify(validation.plan) }
         : {}),
     },
   })

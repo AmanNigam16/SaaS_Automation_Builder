@@ -9,6 +9,7 @@ import {
   deleteScheduledJob,
   executeDurableWorkflowRun,
   parseFlowSteps,
+  parseWorkflowExecutionState,
 } from '@/lib/workflow-runner'
 import { validateWorkflowForPublish } from '@/lib/workflow-validation'
 
@@ -34,7 +35,7 @@ export const runWorkflowNow = async (workflowId: string) => {
   })
   if (!workflow) return { message: 'Workflow not found' }
 
-  const result = await executeDurableWorkflowRun(workflow, validation.steps, {
+  const result = await executeDurableWorkflowRun(workflow, validation.plan, {
     eventId: `manual:${randomUUID()}`,
     triggerType: 'Manual run',
     metadata: { requestedBy: 'user' },
@@ -106,12 +107,25 @@ export const retryWorkflowRun = async (runId: string) => {
     if (step.creditCharged) reservedStepIndexes.add(step.stepIndex)
   }
 
-  const startStepIndex = steps.findIndex(
-    (_, index) => latestStepByIndex.get(index)?.status !== 'SUCCEEDED'
-  )
-  if (startStepIndex < 0) return { message: 'This run has no retryable step' }
+  const executionState = !Array.isArray(steps)
+    ? parseWorkflowExecutionState(run.output)
+    : null
+  const startStepIndex = Array.isArray(steps)
+    ? steps.findIndex(
+        (_, index) => latestStepByIndex.get(index)?.status !== 'SUCCEEDED'
+      )
+    : executionState?.nextStepIndex ?? 0
+  if (Array.isArray(steps) && startStepIndex < 0) {
+    return { message: 'This run has no retryable step' }
+  }
+  if (!Array.isArray(steps) && !executionState) {
+    return { message: 'This run has no resumable execution state' }
+  }
 
   if (run.status === 'WAITING') {
+    if (run.retryAt && run.retryAt.getTime() > Date.now()) {
+      return { message: `This run can resume after ${run.retryAt.toLocaleString()}` }
+    }
     await deleteScheduledJob(run.retryJobId ?? undefined).catch(() => undefined)
   }
 
@@ -130,6 +144,7 @@ export const retryWorkflowRun = async (runId: string) => {
       nextAttemptByStep,
       reservedStepIndexes,
       retryCount: run.retryCount,
+      executionState: executionState ?? undefined,
     }
   )
 

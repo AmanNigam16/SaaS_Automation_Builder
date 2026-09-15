@@ -72,11 +72,20 @@ const EditorCanvasCardSingle = ({ data }: { data: EditorCanvasCardType }) => {
           })}
         ></div>
       </Card>
-      <CustomHandle
-        type="source"
-        position={Position.Bottom}
-        id="a"
-      />
+      {data.type === 'Condition' ? (
+        <>
+          <CustomHandle type="source" position={Position.Bottom} id="true" style={{ left: '35%' }} />
+          <span className="absolute -bottom-7 left-[24%] text-[10px] text-green-500">True</span>
+          {data.metadata.conditionMode !== 'filter' && (
+            <>
+              <CustomHandle type="source" position={Position.Bottom} id="false" style={{ left: '65%' }} />
+              <span className="absolute -bottom-7 left-[67%] text-[10px] text-red-500">False</span>
+            </>
+          )}
+        </>
+      ) : (
+        <CustomHandle type="source" position={Position.Bottom} id="a" />
+      )}
     </>
   )
 }

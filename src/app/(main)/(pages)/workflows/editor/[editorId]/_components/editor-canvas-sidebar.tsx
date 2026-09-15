@@ -4,7 +4,7 @@ import { useNodeConnections } from '@/providers/connections-provider'
 import { useEditor } from '@/providers/editor-provider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Separator } from '@/components/ui/separator'
 import { CONNECTIONS, EditorCanvasDefaultCardTypes } from '@/lib/constant'
 import {
@@ -28,6 +28,7 @@ import {
 import RenderConnectionAccordion from './render-connection-accordion'
 import RenderOutputAccordion from './render-output-accordian'
 import { useFuzzieStore } from '@/store'
+import WorkflowNodeSettings from './workflow-node-settings'
 
 type Props = {
   nodes: EditorNodeType[] | null
@@ -37,12 +38,21 @@ const EditorCanvasSidebar = ({ nodes }: Props) => {
   const { state } = useEditor()
   const { nodeConnection } = useNodeConnections()
   const { googleFile, setSlackChannels } = useFuzzieStore()
+  const nodeConnectionRef = useRef(nodeConnection)
 
   useEffect(() => {
-    if (state) {
-      onConnections(nodeConnection, state, googleFile)
+    nodeConnectionRef.current = nodeConnection
+  }, [nodeConnection])
+
+  useEffect(() => {
+    if (state.editor.selectedNode.id) {
+      onConnections(
+        nodeConnectionRef.current,
+        state.editor.selectedNode.data.title,
+        googleFile
+      )
     }
-  }, [state])
+  }, [googleFile, state.editor.selectedNode.id, state.editor.selectedNode.data.title])
 
   useEffect(() => {
     if (nodeConnection.slackNode.slackAccessToken) {
@@ -51,10 +61,13 @@ const EditorCanvasSidebar = ({ nodes }: Props) => {
         setSlackChannels
       )
     }
-  }, [nodeConnection])
+  }, [nodeConnection.slackNode.slackAccessToken, setSlackChannels])
 
   // ✅ SAFE FALLBACK (important)
   const hasNodes = (nodes?.length ?? 0) > 0
+  const selectedUsesConnection = CONNECTIONS.some(
+    (connection) => connection.title === state.editor.selectedNode?.data?.title
+  )
 
   return (
     <aside>
@@ -106,7 +119,13 @@ const EditorCanvasSidebar = ({ nodes }: Props) => {
           </div>
 
           <Accordion type="multiple">
-            <AccordionItem
+            <AccordionItem value="Configuration" className="border-y-[1px] px-2">
+              <AccordionTrigger className="!no-underline">Configuration</AccordionTrigger>
+              <AccordionContent>
+                <WorkflowNodeSettings />
+              </AccordionContent>
+            </AccordionItem>
+            {selectedUsesConnection && <AccordionItem
               value="Options"
               className="border-y-[1px] px-2"
             >
@@ -122,8 +141,8 @@ const EditorCanvasSidebar = ({ nodes }: Props) => {
                   />
                 ))}
               </AccordionContent>
-            </AccordionItem>
-            <AccordionItem
+            </AccordionItem>}
+            {selectedUsesConnection && <AccordionItem
               value="Expected Output"
               className="px-2"
             >
@@ -134,7 +153,7 @@ const EditorCanvasSidebar = ({ nodes }: Props) => {
                 state={state}
                 nodeConnection={nodeConnection}
               />
-            </AccordionItem>
+            </AccordionItem>}
           </Accordion>
         </TabsContent>
       </Tabs>

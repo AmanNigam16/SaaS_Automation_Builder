@@ -34,7 +34,7 @@ type Props = {}
 
 const initialNodes: EditorNodeType[] = []
 
-const initialEdges: { id: string; source: string; target: string }[] = []
+const initialEdges: { id: string; source: string; target: string; sourceHandle?: string | null }[] = []
 
 const EditorCanvas = (props: Props) => {
   const { dispatch, state } = useEditor()
@@ -110,7 +110,16 @@ const EditorCanvas = (props: Props) => {
           description: EditorCanvasDefaultCardTypes[type].description,
           completed: false,
           current: false,
-          metadata: {},
+          metadata:
+            type === 'Condition'
+              ? { conditionMode: 'branch', combinator: 'and', conditions: [{ field: '', operator: 'equals', value: '' }] }
+              : type === 'Formatter'
+                ? { formatterOperation: 'trim', input: '' }
+                : type === 'Wait'
+                  ? { waitMode: 'duration', durationSeconds: 60 }
+                  : type === 'Loop'
+                    ? { items: '', maxItems: 25 }
+                    : {},
           type: type,
         },
       }
@@ -143,7 +152,11 @@ const EditorCanvas = (props: Props) => {
 
   useEffect(() => {
     dispatch({ type: 'LOAD_DATA', payload: { edges, elements: nodes } })
-  }, [nodes, edges])
+  }, [dispatch, nodes, edges])
+
+  useEffect(() => {
+    setNodes(state.editor.elements)
+  }, [state.editor.elements])
 
   const nodeTypes = useMemo(
     () => ({
@@ -159,11 +172,13 @@ const EditorCanvas = (props: Props) => {
       'Custom Webhook': EditorCanvasCardSingle,
       'Google Calendar': EditorCanvasCardSingle,
       Wait: EditorCanvasCardSingle,
+      Formatter: EditorCanvasCardSingle,
+      Loop: EditorCanvasCardSingle,
     }),
     []
   )
 
-  const onGetWorkFlow = async () => {
+  const onGetWorkFlow = useCallback(async () => {
     setIsWorkFlowLoading(true)
     const response = await onGetNodesEdges(pathname.split('/').pop()!)
     if (response) {
@@ -171,11 +186,11 @@ const EditorCanvas = (props: Props) => {
         setNodes(response.nodes ? JSON.parse(response.nodes) : [])
     }
     setIsWorkFlowLoading(false)
-  }
+  }, [pathname])
 
   useEffect(() => {
     onGetWorkFlow()
-  }, [])
+  }, [onGetWorkFlow])
 
   return (
     <ResizablePanelGroup direction="horizontal">
@@ -265,9 +280,9 @@ const EditorCanvas = (props: Props) => {
         ) : (
           <FlowInstance
             edges={edges}
-            nodes={nodes}
+            nodes={state.editor.elements}
           >
-            <EditorCanvasSidebar nodes={nodes} />
+            <EditorCanvasSidebar nodes={state.editor.elements} />
           </FlowInstance>
         )}
       </ResizablePanel>

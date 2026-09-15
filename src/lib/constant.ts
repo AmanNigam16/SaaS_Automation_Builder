@@ -145,6 +145,14 @@ export const EditorCanvasDefaultCardTypes = {
     description: 'Delay the next action step by using the wait timer.',
     type: 'Action',
   },
+  Formatter: {
+    description: 'Transform text, numbers, dates, JSON, or lists.',
+    type: 'Action',
+  },
+  Loop: {
+    description: 'Run the following path once for each list item.',
+    type: 'Action',
+  },
 }
 
 export const CONNECTIONS: Connection[] = [

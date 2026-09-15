@@ -12,7 +12,6 @@ type Props = {
 const RenderOutputAccordion = ({ state, nodeConnection }: Props) => {
   const {
     googleFile,
-    setGoogleFile,
     selectedSlackChannels,
     setSelectedSlackChannels,
   } = useFuzzieStore()
@@ -21,7 +20,6 @@ const RenderOutputAccordion = ({ state, nodeConnection }: Props) => {
       nodeConnection={nodeConnection}
       newState={state}
       file={googleFile}
-      setFile={setGoogleFile}
       selectedSlackChannels={selectedSlackChannels}
       setSelectedSlackChannels={setSelectedSlackChannels}
     />

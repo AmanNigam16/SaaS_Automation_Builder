@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { retryWorkflowRun } from '../../workflows/_actions/workflow-runs'
 
-export const RetryRunButton = ({ runId }: { runId: string }) => {
+export const RetryRunButton = ({ runId, resume = false }: { runId: string; resume?: boolean }) => {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirmed, setConfirmed] = useState(false)
@@ -29,7 +29,11 @@ export const RetryRunButton = ({ runId }: { runId: string }) => {
   return (
     <Button size="sm" variant="outline" onClick={retry} disabled={isPending}>
       <RotateCw className="mr-1.5 h-3.5 w-3.5" />
-      {isPending ? 'Retrying…' : confirmed ? 'Confirm retry' : 'Retry'}
+      {isPending
+        ? resume ? 'Resuming…' : 'Retrying…'
+        : confirmed
+          ? resume ? 'Confirm resume' : 'Confirm retry'
+          : resume ? 'Resume' : 'Retry'}
     </Button>
   )
 }

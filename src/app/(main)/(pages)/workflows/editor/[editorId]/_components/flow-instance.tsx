@@ -1,35 +1,35 @@
 'use client'
-import { Button } from '@/components/ui/button'
-import { useNodeConnections } from '@/providers/connections-provider'
+
+import React, { useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import React, { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import type { Edge } from 'reactflow'
+import type { EditorNodeType } from '@/lib/types'
 import {
   onCreateNodesEdges,
   onFlowPublish,
 } from '../_actions/workflow-connections'
-import { toast } from 'sonner'
 
 type Props = {
   children: React.ReactNode
-  edges: any[]
-  nodes: any[]
+  edges: Edge[]
+  nodes: EditorNodeType[]
 }
 
 const FlowInstance = ({ children, edges, nodes }: Props) => {
   const pathname = usePathname()
-  const [isFlow, setIsFlow] = useState([])
-  const { nodeConnection } = useNodeConnections()
+  const canSave = nodes.length > 1 && edges.length > 0
 
   const onFlowAutomation = useCallback(async () => {
     const flow = await onCreateNodesEdges(
       pathname.split('/').pop()!,
       JSON.stringify(nodes),
       JSON.stringify(edges),
-      JSON.stringify(isFlow)
+      '[]'
     )
-
     if (flow) toast.message(flow.message)
-  }, [nodeConnection])
+  }, [edges, nodes, pathname])
 
   const onPublishWorkflow = useCallback(async () => {
     const workflowId = pathname.split('/').pop()!
@@ -37,7 +37,7 @@ const FlowInstance = ({ children, edges, nodes }: Props) => {
       workflowId,
       JSON.stringify(nodes),
       JSON.stringify(edges),
-      JSON.stringify(isFlow)
+      '[]'
     )
     if (saved.message !== 'flow saved') {
       toast.error(saved.message)
@@ -46,41 +46,13 @@ const FlowInstance = ({ children, edges, nodes }: Props) => {
 
     const response = await onFlowPublish(workflowId, true)
     if (response) toast.message(response)
-  }, [edges, isFlow, nodes, pathname])
-
-  const onAutomateFlow = async () => {
-    const flows: any = []
-    const connectedEdges = edges.map((edge) => edge.target)
-    connectedEdges.map((target) => {
-      nodes.map((node) => {
-        if (node.id === target) {
-          flows.push(node.type)
-        }
-      })
-    })
-
-    setIsFlow(flows)
-  }
-
-  useEffect(() => {
-    onAutomateFlow()
-  }, [edges])
+  }, [edges, nodes, pathname])
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex gap-3 p-4">
-        <Button
-          onClick={onFlowAutomation}
-          disabled={isFlow.length < 1}
-        >
-          Save
-        </Button>
-        <Button
-          disabled={isFlow.length < 1}
-          onClick={onPublishWorkflow}
-        >
-          Publish
-        </Button>
+        <Button onClick={onFlowAutomation} disabled={!canSave}>Save</Button>
+        <Button disabled={!canSave} onClick={onPublishWorkflow}>Publish</Button>
       </div>
       {children}
     </div>
