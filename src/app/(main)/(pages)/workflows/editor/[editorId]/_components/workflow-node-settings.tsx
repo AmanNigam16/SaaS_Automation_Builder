@@ -15,6 +15,7 @@ import {
   getNodeOutputFields,
   getWaitUntil,
   resolveExpression,
+  validateWorkflowNodeConfig,
   type ConditionOperator,
   type WorkflowContext,
   type WorkflowNodeConfig,
@@ -31,6 +32,8 @@ const CONFIGURABLE_TYPES = new Set([
   'Slack',
   'Notion',
   'Google Drive',
+  'Email',
+  'Google Calendar',
 ])
 
 const conditionOperators: Array<{ value: ConditionOperator; label: string }> = [
@@ -161,6 +164,8 @@ const WorkflowNodeSettings = () => {
         const value = resolveExpression(config.items ?? '', sampleContext)
         toast.message(Array.isArray(value) ? `${Math.min(value.length, config.maxItems ?? 25)} item(s)` : 'Loop input is not a list')
       } else {
+        const error = validateWorkflowNodeConfig({ id: selected.id, type: selected.type, config })
+        if (error) throw new Error(error)
         toast.message('Template variables are valid and will resolve when the workflow runs')
       }
     } catch (error) {
@@ -316,6 +321,38 @@ const WorkflowNodeSettings = () => {
           <Input value={config.items ?? ''} placeholder="{{steps.nodeId.result}}" onChange={(event) => update({ items: event.target.value })} />
           <FieldPicker fields={availableFields} onPick={(field) => update({ items: field })} />
           <div className="space-y-2"><Label>Safety limit (1–100)</Label><Input type="number" min={1} max={100} value={config.maxItems ?? 25} onChange={(event) => update({ maxItems: Number(event.target.value) })} /></div>
+        </div>
+      )}
+
+      {selected.type === 'Email' && (
+        <div className="space-y-3">
+          <div className="space-y-2"><Label>Action</Label><select className={selectClassName} value={config.operation ?? 'gmail_send'} onChange={(event) => update({ operation: event.target.value as WorkflowNodeConfig['operation'] })}><option value="gmail_send">Send email</option><option value="gmail_create_draft">Create draft</option></select></div>
+          <Input value={config.to ?? ''} placeholder="To (email or {{field}})" onChange={(event) => update({ to: event.target.value })} />
+          <Input value={config.cc ?? ''} placeholder="Cc (optional)" onChange={(event) => update({ cc: event.target.value })} />
+          <Input value={config.bcc ?? ''} placeholder="Bcc (optional)" onChange={(event) => update({ bcc: event.target.value })} />
+          <Input value={config.subject ?? ''} placeholder="Subject" onChange={(event) => update({ subject: event.target.value })} />
+          <Textarea value={config.body ?? ''} placeholder="Message body" onChange={(event) => update({ body: event.target.value })} />
+          <FieldPicker fields={availableFields} onPick={(field) => update({ body: `${config.body ?? ''}${field}` })} />
+        </div>
+      )}
+
+      {selected.type === 'Google Calendar' && (
+        <div className="space-y-3">
+          <div className="space-y-2"><Label>Action</Label><select className={selectClassName} value={config.operation ?? 'calendar_create'} onChange={(event) => update({ operation: event.target.value as WorkflowNodeConfig['operation'] })}><option value="calendar_create">Create event</option><option value="calendar_update">Update event</option><option value="calendar_delete">Delete event</option></select></div>
+          <Input value={config.calendarId ?? 'primary'} placeholder="Calendar ID" onChange={(event) => update({ calendarId: event.target.value })} />
+          {(config.operation === 'calendar_update' || config.operation === 'calendar_delete') && <Input value={config.eventId ?? ''} placeholder="Event ID or {{field}}" onChange={(event) => update({ eventId: event.target.value })} />}
+          {config.operation !== 'calendar_delete' && <>
+            <Input value={config.summary ?? ''} placeholder="Event title" onChange={(event) => update({ summary: event.target.value })} />
+            <Textarea value={config.description ?? ''} placeholder="Description (optional)" onChange={(event) => update({ description: event.target.value })} />
+            <Input value={config.location ?? ''} placeholder="Location (optional)" onChange={(event) => update({ location: event.target.value })} />
+            <Input value={config.start ?? ''} placeholder="Start: 2026-09-15T10:00:00+05:30" onChange={(event) => update({ start: event.target.value })} />
+            <Input value={config.end ?? ''} placeholder="End: 2026-09-15T11:00:00+05:30" onChange={(event) => update({ end: event.target.value })} />
+            <Input value={config.timeZone ?? 'UTC'} placeholder="Timezone, for example Asia/Kolkata" onChange={(event) => update({ timeZone: event.target.value })} />
+            <Input value={config.attendees ?? ''} placeholder="Attendee emails, comma-separated" onChange={(event) => update({ attendees: event.target.value })} />
+            <div className="space-y-2"><Label>Reminder (minutes)</Label><Input type="number" min={0} max={40320} value={config.reminderMinutes ?? ''} onChange={(event) => update({ reminderMinutes: event.target.value === '' ? undefined : Number(event.target.value) })} /></div>
+            <select className={selectClassName} value={config.conflictPolicy ?? 'allow'} onChange={(event) => update({ conflictPolicy: event.target.value as 'allow' | 'stop' })}><option value="allow">Allow calendar conflicts</option><option value="stop">Stop when time is busy</option></select>
+            <FieldPicker fields={availableFields} onPick={(field) => update({ description: `${config.description ?? ''}${field}` })} />
+          </>}
         </div>
       )}
 

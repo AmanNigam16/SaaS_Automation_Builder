@@ -7,6 +7,9 @@ const DEFAULT_GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/drive.metadata.readonly',
   'https://www.googleapis.com/auth/drive.activity.readonly',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/calendar',
 ]
 
 const getConfiguredScopes = () => {
@@ -118,6 +121,25 @@ export const getGoogleDriveClient = async (clerkUserId: string) => {
 
   oauth2Client.setCredentials(credentials)
   return oauth2Client
+}
+
+export const getGoogleWorkspaceClient = async (
+  clerkUserId: string,
+  requiredScopes: string[] = []
+) => {
+  const credential = await getGoogleDriveCredential(clerkUserId)
+  if (!credential) throw new Error('Google connection is missing')
+
+  const missingScope = requiredScopes.find(
+    (scope) => !credential.grantedScopes.includes(scope)
+  )
+  if (missingScope) {
+    throw new Error('Reconnect Google to grant the permissions required by this action')
+  }
+
+  const client = await getGoogleDriveClient(clerkUserId)
+  if (!client) throw new Error('Google connection requires reconnecting')
+  return client
 }
 
 export const upsertGoogleDriveConnection = async ({

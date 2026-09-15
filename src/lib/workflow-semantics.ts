@@ -7,6 +7,8 @@ export const EXECUTABLE_NODE_TYPES = new Set([
   'Formatter',
   'Wait',
   'Loop',
+  'Email',
+  'Google Calendar',
 ])
 
 export type WorkflowValue =
@@ -36,6 +38,28 @@ export type ConditionOperator =
   | 'is_false'
 
 export type WorkflowNodeConfig = {
+  operation?:
+    | 'gmail_send'
+    | 'gmail_create_draft'
+    | 'calendar_create'
+    | 'calendar_update'
+    | 'calendar_delete'
+  to?: string
+  cc?: string
+  bcc?: string
+  subject?: string
+  body?: string
+  calendarId?: string
+  eventId?: string
+  summary?: string
+  description?: string
+  location?: string
+  start?: string
+  end?: string
+  timeZone?: string
+  attendees?: string
+  reminderMinutes?: number
+  conflictPolicy?: 'allow' | 'stop'
   template?: string
   conditionMode?: 'branch' | 'filter'
   combinator?: 'and' | 'or'
@@ -98,10 +122,10 @@ export const WORKFLOW_NODE_SCHEMAS: Record<
   Formatter: { inputs: { value: 'any' }, outputs: { result: 'any' } },
   Wait: { inputs: { duration: 'number', until: 'date' }, outputs: { resumedAt: 'date' } },
   Loop: { inputs: { items: 'list' }, outputs: { item: 'any', index: 'number', items: 'list' } },
-  Email: { inputs: { to: 'string', subject: 'string', body: 'string' }, outputs: { message: 'string' } },
+  Email: { inputs: { to: 'string', subject: 'string', body: 'string' }, outputs: { messageId: 'string', draftId: 'string', threadId: 'string' } },
   AI: { inputs: { prompt: 'string' }, outputs: { result: 'any' } },
   'Custom Webhook': { inputs: { request: 'object' }, outputs: { response: 'object' } },
-  'Google Calendar': { inputs: { event: 'object' }, outputs: { event: 'object' } },
+  'Google Calendar': { inputs: { event: 'object' }, outputs: { eventId: 'string', eventUrl: 'string', deleted: 'boolean' } },
   Trigger: { inputs: {}, outputs: { data: 'object' } },
   Action: { inputs: { data: 'any' }, outputs: { result: 'any' } },
 }
@@ -134,7 +158,7 @@ const asConfig = (value: unknown): WorkflowNodeConfig =>
     ? (value as WorkflowNodeConfig)
     : {}
 
-const validateNodeConfig = (node: WorkflowPlanNode): string | null => {
+export const validateWorkflowNodeConfig = (node: WorkflowPlanNode): string | null => {
   const config = node.config
   if (node.type === 'Condition') {
     if (!config.conditions?.length) return 'Configure at least one condition'
@@ -168,6 +192,37 @@ const validateNodeConfig = (node: WorkflowPlanNode): string | null => {
   ) {
     return 'Loop safety limit must be between 1 and 100'
   }
+  if (node.type === 'Email') {
+    if (!['gmail_send', 'gmail_create_draft'].includes(config.operation ?? '')) {
+      return 'Choose whether to send the email or create a draft'
+    }
+    if (!config.to?.trim() || !config.subject?.trim() || !config.body?.trim()) {
+      return 'Complete the email recipient, subject, and body'
+    }
+  }
+  if (node.type === 'Google Calendar') {
+    if (!['calendar_create', 'calendar_update', 'calendar_delete'].includes(config.operation ?? '')) {
+      return 'Choose a calendar operation'
+    }
+    if (
+      (config.operation === 'calendar_update' || config.operation === 'calendar_delete') &&
+      !config.eventId?.trim()
+    ) {
+      return 'Event ID is required for this calendar operation'
+    }
+    if (
+      config.operation !== 'calendar_delete' &&
+      (!config.summary?.trim() || !config.start?.trim() || !config.end?.trim())
+    ) {
+      return 'Complete the event title, start time, and end time'
+    }
+    if (
+      config.reminderMinutes !== undefined &&
+      (!Number.isInteger(config.reminderMinutes) || config.reminderMinutes < 0 || config.reminderMinutes > 40320)
+    ) {
+      return 'Reminder must be between 0 and 40320 minutes'
+    }
+  }
   return null
 }
 
@@ -190,7 +245,7 @@ export const compileWorkflowGraph = (
       return { valid: false as const, message: `${node.type} is not executable yet` }
     }
     const normalized = { id: node.id, type: node.type, config: asConfig(node.data?.metadata) }
-    const configError = validateNodeConfig(normalized)
+    const configError = validateWorkflowNodeConfig(normalized)
     if (configError) return { valid: false as const, message: configError }
     nodes.push(normalized)
   }

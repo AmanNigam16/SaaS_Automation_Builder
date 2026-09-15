@@ -121,6 +121,10 @@ const EditorCanvas = (props: Props) => {
                   ? { waitMode: 'duration', durationSeconds: 60 }
                   : type === 'Loop'
                     ? { items: '', maxItems: 25 }
+                    : type === 'Email'
+                      ? { operation: 'gmail_send', to: '', subject: '', body: '' }
+                      : type === 'Google Calendar'
+                        ? { operation: 'calendar_create', calendarId: 'primary', timeZone: 'UTC', conflictPolicy: 'allow' }
                     : {},
           type: type,
         },

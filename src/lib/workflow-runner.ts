@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { postContentToWebHook } from '@/app/(main)/(pages)/connections/_actions/discord-connection'
 import { onCreateNewPageInDatabase } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
 import { postMessageToSlack } from '@/app/(main)/(pages)/connections/_actions/slack-connection'
+import { executeCalendarAction, executeGmailAction } from '@/lib/google-workspace'
 import {
   applyFormatter,
   evaluateCondition,
@@ -157,6 +158,7 @@ const prepareAction = async (
 
     return async () => {
       await postContentToWebHook(template, discordMessage.url)
+      return { message: 'Message sent' }
     }
   }
 
@@ -183,6 +185,7 @@ const prepareAction = async (
         channels,
         template
       )
+      return { message: 'Message sent' }
     }
   }
 
@@ -200,12 +203,21 @@ const prepareAction = async (
 
     const content = JSON.parse(template)
     return async () => {
-      await onCreateNewPageInDatabase(
+      const page = await onCreateNewPageInDatabase(
         flow.notionDbId!,
         flow.notionAccessToken!,
         content
       )
+      return { message: 'Page created', pageId: page?.id ?? null }
     }
+  }
+
+  if (step === 'Email') {
+    return () => executeGmailAction(flow.userId, config, context!)
+  }
+
+  if (step === 'Google Calendar') {
+    return () => executeCalendarAction(flow.userId, config, context!)
   }
 
   throw new Error(`${step} is not executable`)
@@ -651,8 +663,8 @@ const executePlannedWorkflowRun = async ({
         where: { id: stepRun.id },
         data: { creditCharged: true },
       })
-      await action()
-      await completeStep(stepRun.id, node, item, { message: 'Action completed' })
+      const output = await action()
+      await completeStep(stepRun.id, node, item, output)
       enqueue(node, item.context)
       await persistState()
     } catch (error) {

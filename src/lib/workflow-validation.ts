@@ -22,7 +22,7 @@ export const validateWorkflowForPublish = async (
       where: { clerkId: userId },
       select: {
         googleResourceId: true,
-        LocalGoogleCredential: { select: { subscribed: true } },
+        LocalGoogleCredential: { select: { subscribed: true, grantedScopes: true } },
       },
     }),
     graph.steps.includes('Discord')
@@ -53,6 +53,25 @@ export const validateWorkflowForPublish = async (
     return {
       valid: false as const,
       message: 'Create the Google Drive listener before publishing',
+    }
+  }
+
+  const requiredGoogleScopes = [
+    ...(graph.steps.includes('Email')
+      ? ['https://www.googleapis.com/auth/gmail.compose']
+      : []),
+    ...(graph.steps.includes('Google Calendar')
+      ? ['https://www.googleapis.com/auth/calendar']
+      : []),
+  ]
+  if (
+    requiredGoogleScopes.some(
+      (scope) => !googleUser.LocalGoogleCredential?.grantedScopes.includes(scope)
+    )
+  ) {
+    return {
+      valid: false as const,
+      message: 'Reconnect Google to grant the permissions required by this workflow',
     }
   }
 

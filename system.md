@@ -243,15 +243,22 @@ Complete the currently weak product surfaces:
 - Add accessibility, responsive, security, and full browser E2E checks.
 - Document architecture, tradeoffs, real-world use cases, screenshots, and a demo video.
 
-Current position: **Phase 3 implementation complete** on `codex/phase-1-foundation`; Phase 4 is next. Phase 1 and Phase 2 implementation are complete for the roadmap's current supported subset; their intentionally skipped or later-phase integration tests must not be described as verified. Full integration nodes belong to **Phase 4**, subscription lifecycle/renewal to **Phase 5**, and account-management standardization/encryption to **Phase 6**. Use only this original eight-phase numbering for planning and status.
+Current position: **Phase 4 in progress** on `codex/phase-1-foundation`. Phase 1–3 implementation is complete for the roadmap's current supported subset; intentionally skipped or later-phase integration tests must not be described as verified. Phase 4's first milestone implements Gmail send/draft and Google Calendar create/update/delete actions. Gmail/Calendar automatic triggers remain for Phase 5 scheduling/lifecycle work and must not be presented as active. Use only this original eight-phase numbering for planning and status.
 
 ## Current pass
 
 - Date: 2026-09-15 (Asia/Calcutta)
-- Status: Phase 3 has a typed graph/compiler contract, preceding-step field references and expressions, conditions and filters, true/false paths, formatters, bounded loops, durable fixed/until waits, configuration tests, and explicit Drive sample-data fetching. Existing Discord, Slack, and Notion execution paths remain the provider-action backend rather than being duplicated. Static, production-build, authenticated editor, and branch Preview verification pass.
-- Next target: begin Phase 4 by implementing the advertised integrations in the roadmap order, preserving Phase 3's compiler/runner contract and existing UI. Do not alter production or `main`.
+- Status: Phase 3 remains complete. Phase 4 now has locally verified Gmail send/draft and Calendar create/update/delete configuration, graph validation, required-scope publish validation, durable-runner execution, action outputs, provider timeouts, Calendar reminders/attendees/timezone/conflict checks, and Gmail header-injection protection. Both integrations reuse the existing server-only Google OAuth credential; users with older grants must reconnect before publishing these actions. No real email or calendar mutation has been executed.
+- Next target: finish Phase 4 with Drive actions, custom inbound/outbound webhooks, the AI action, and focused hardening of existing Slack/Discord/Notion actions. Automatic Gmail/Calendar triggers and Drive subscription renewal scheduling remain Phase 5 lifecycle work. Do not alter production or `main`.
 - Commit/push status: Phase 3 foundation `44337916241c20a8326047a629c5758ea4855585` and editor-state correction `83cabde990ea7a5798f496d1b4db8fd945052d59` are pushed to `codex/phase-1-foundation`.
 - Deployment status: corrected Phase 3 Preview `dpl_CLdVRAGYySKwYwHGaP9joWrhB3nf` is READY on the stable branch alias and points to commit `83cabde`. Vercel Authentication/Standard Protection remains enabled. No merge, production deployment, production alias change, provider-console change, or database migration was performed for Phase 3.
+
+### 2026-09-15 — Phase 4 Google Workspace action milestone
+
+- Added Gmail send-email/create-draft and Google Calendar create/update/delete execution to the existing typed graph and durable runner. Configured values support preceding-step expressions; provider results are stored as step outputs and existing per-action credit behavior is preserved.
+- Reused `LocalGoogleCredential` and the existing refresh-token path. Publish and execution both reject missing permissions with a reconnect message. Gmail MIME generation encodes Unicode and rejects CR/LF header injection. Calendar calls have a 10-second timeout and support calendar ID, event ID, attendees, timezone, popup reminders, and an optional free/busy stop policy.
+- Preserved the existing editor design and added only matching form controls. No database schema, dependency, provider-console setting, production environment, or `main` branch was changed. No external Gmail/Calendar write was executed.
+- Verification: 14/14 focused tests pass, including prior OAuth/graph/Phase 3 regression coverage plus Gmail MIME safety and Gmail/Calendar graph validation. TypeScript `--noEmit`, `git diff --check`, and Next lint pass; lint reports only the documented pre-existing hook warnings. The optimized Next.js production build completes all 22 routes. Authenticated editor and branch Preview verification are still required before this milestone is committed/pushed.
 
 ## Change and verification log
 

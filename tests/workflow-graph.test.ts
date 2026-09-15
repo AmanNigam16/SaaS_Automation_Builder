@@ -80,3 +80,42 @@ test('compiles explicit true and false condition paths', () => {
     assert.deepEqual(result.plan.edges.map((edge) => edge.branch), [undefined, 'true', 'false'])
   }
 })
+
+test('accepts configured Gmail and Calendar actions', () => {
+  const result = validateLinearWorkflowGraph(
+    JSON.stringify([
+      { id: 'trigger', type: 'Google Drive', data: { metadata: {} } },
+      { id: 'email', type: 'Email', data: { metadata: { operation: 'gmail_send', to: 'person@example.com', subject: 'Changed', body: '{{trigger.fileName}}' } } },
+      { id: 'calendar', type: 'Google Calendar', data: { metadata: { operation: 'calendar_create', summary: 'Review', start: '2026-09-15T10:00:00Z', end: '2026-09-15T11:00:00Z' } } },
+    ]),
+    JSON.stringify([
+      { source: 'trigger', target: 'email' },
+      { source: 'email', target: 'calendar' },
+    ])
+  )
+
+  assert.equal(result.valid, true)
+  if (result.valid) assert.deepEqual(result.steps, ['Email', 'Google Calendar'])
+})
+
+test('rejects incomplete Gmail and Calendar actions', () => {
+  const email = validateLinearWorkflowGraph(
+    JSON.stringify([
+      { id: 'trigger', type: 'Google Drive' },
+      { id: 'email', type: 'Email', data: { metadata: { operation: 'gmail_send' } } },
+    ]),
+    JSON.stringify([{ source: 'trigger', target: 'email' }])
+  )
+  assert.equal(email.valid, false)
+  if (!email.valid) assert.equal(email.message, 'Complete the email recipient, subject, and body')
+
+  const calendar = validateLinearWorkflowGraph(
+    JSON.stringify([
+      { id: 'trigger', type: 'Google Drive' },
+      { id: 'calendar', type: 'Google Calendar', data: { metadata: { operation: 'calendar_update' } } },
+    ]),
+    JSON.stringify([{ source: 'trigger', target: 'calendar' }])
+  )
+  assert.equal(calendar.valid, false)
+  if (!calendar.valid) assert.equal(calendar.message, 'Event ID is required for this calendar operation')
+})
