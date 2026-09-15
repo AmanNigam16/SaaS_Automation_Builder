@@ -31,6 +31,7 @@ type DurableRunInput = {
   eventId: string
   triggerType: string
   metadata?: Prisma.InputJsonValue
+  baseUrl?: string
 }
 
 type ExistingRunOptions = {
@@ -38,6 +39,8 @@ type ExistingRunOptions = {
   startStepIndex: number
   nextAttemptByStep: Map<number, number>
   reservedStepIndexes?: Set<number>
+  retryCount?: number
+  alreadyClaimed?: boolean
 }
 
 type ActionFailure = {
@@ -52,6 +55,11 @@ const CONFIGURATION_ERRORS = new Set([
   'Slack configuration is incomplete',
   'Notion configuration is incomplete',
 ])
+
+const RETRY_DELAYS_MS = [5 * 60_000, 15 * 60_000, 60 * 60_000]
+
+export const getRetryDelayMs = (retryCount: number) =>
+  RETRY_DELAYS_MS[retryCount] ?? null
 
 const getErrorMessage = (error: unknown, stepType: string) => {
   if (error instanceof SyntaxError) return 'Notion template is invalid'
@@ -190,6 +198,85 @@ const reserveActionCredit = async (clerkUserId: string) => {
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
 
+const isPublicProductionUrl = (value: string | undefined) => {
+  if (!value || process.env.VERCEL_ENV !== 'production') return false
+
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const formatCronDate = (date: Date) =>
+  [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+    String(date.getUTCHours()).padStart(2, '0'),
+    String(date.getUTCMinutes()).padStart(2, '0'),
+    String(date.getUTCSeconds()).padStart(2, '0'),
+  ].join('')
+
+const scheduleWorkflowRetry = async ({
+  runId,
+  retryAt,
+  baseUrl,
+}: {
+  runId: string
+  retryAt: Date
+  baseUrl: string
+}) => {
+  if (!process.env.CRON_JOB_KEY || !isPublicProductionUrl(baseUrl)) return null
+
+  const scheduledAt = new Date(retryAt)
+  scheduledAt.setUTCSeconds(0, 0)
+  if (scheduledAt <= new Date()) scheduledAt.setUTCMinutes(scheduledAt.getUTCMinutes() + 1)
+
+  const resumeToken = randomBytes(32).toString('hex')
+  const resumeTokenHash = createHash('sha256')
+    .update(resumeToken)
+    .digest('hex')
+  const response = await axios.put(
+    'https://api.cron-job.org/jobs',
+    {
+      job: {
+        enabled: true,
+        title: `Workflow retry ${runId}`,
+        saveResponses: false,
+        url: `${normalizeBaseUrl(baseUrl)}/api/cron/workflow-retry?run_id=${encodeURIComponent(runId)}`,
+        requestMethod: 0,
+        extendedData: {
+          headers: { 'X-Workflow-Retry-Token': resumeToken },
+        },
+        schedule: {
+          timezone: 'UTC',
+          expiresAt: formatCronDate(new Date(scheduledAt.getTime() + 2 * 60_000)),
+          hours: [scheduledAt.getUTCHours()],
+          mdays: [scheduledAt.getUTCDate()],
+          minutes: [scheduledAt.getUTCMinutes()],
+          months: [scheduledAt.getUTCMonth() + 1],
+          wdays: [-1],
+        },
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.CRON_JOB_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10_000,
+    }
+  )
+
+  const jobId = response.data.jobId
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) {
+    throw new Error('Cron scheduler returned an invalid job ID')
+  }
+
+  return { jobId: jobId as number, resumeTokenHash, scheduledAt }
+}
+
 export const parseFlowSteps = (value: string | null | undefined) => {
   if (!value) return []
 
@@ -275,19 +362,24 @@ export const executeDurableWorkflowRun = async (
   let run
 
   if (existingRun) {
-    const claimed = await db.workflowRun.updateMany({
-      where: {
-        id: existingRun.runId,
-        status: { in: ['QUEUED', 'WAITING', 'FAILED', 'PAUSED'] },
-      },
-      data: {
-        status: 'RUNNING',
-        error: null,
-        finishedAt: null,
-      },
-    })
+    if (!existingRun.alreadyClaimed) {
+      const claimed = await db.workflowRun.updateMany({
+        where: {
+          id: existingRun.runId,
+          status: { in: ['QUEUED', 'WAITING', 'FAILED', 'PAUSED'] },
+        },
+        data: {
+          status: 'RUNNING',
+          error: null,
+          retryAt: null,
+          retryJobId: null,
+          retryTokenHash: null,
+          finishedAt: null,
+        },
+      })
 
-    if (!claimed.count) return { status: 'unavailable' as const }
+      if (!claimed.count) return { status: 'unavailable' as const }
+    }
     run = { id: existingRun.runId }
   } else {
     try {
@@ -390,6 +482,55 @@ export const executeDurableWorkflowRun = async (
       })
     } catch (error) {
       const failure = getActionFailure(error, stepType)
+      const retryDelayMs =
+        failure.errorCode === 'RATE_LIMITED'
+          ? getRetryDelayMs(existingRun?.retryCount ?? 0)
+          : null
+
+      if (retryDelayMs !== null && trigger.baseUrl) {
+        const retryAt = new Date(Date.now() + retryDelayMs)
+        const scheduled = await scheduleWorkflowRetry({
+          runId: run.id,
+          retryAt,
+          baseUrl: trigger.baseUrl,
+        })
+
+        if (scheduled) {
+          try {
+            await db.$transaction([
+              db.workflowStepRun.update({
+                where: { id: stepRun.id },
+                data: {
+                  status: 'FAILED',
+                  error: failure.message,
+                  errorCode: failure.errorCode,
+                  retryable: true,
+                  finishedAt: new Date(),
+                },
+              }),
+              db.workflowRun.update({
+                where: { id: run.id },
+                data: {
+                  status: 'WAITING',
+                  error: failure.message,
+                  retryAt: scheduled.scheduledAt,
+                  retryCount: { increment: 1 },
+                  retryJobId: scheduled.jobId,
+                  retryTokenHash: scheduled.resumeTokenHash,
+                },
+              }),
+            ])
+
+            return {
+              status: 'waiting' as const,
+              runId: run.id,
+              retryAt: scheduled.scheduledAt,
+            }
+          } catch {
+            await deleteScheduledJob(scheduled.jobId).catch(() => undefined)
+          }
+        }
+      }
 
       await db.$transaction([
         db.workflowStepRun.update({

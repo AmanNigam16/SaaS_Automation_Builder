@@ -138,12 +138,18 @@ const LogsPage = async () => {
                       <StatusIcon className="h-3.5 w-3.5" />
                       {details.label}
                     </Badge>
-                    {(run.status === 'QUEUED' || run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
+                    {(run.status === 'QUEUED' || run.status === 'WAITING' || run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
                       <RetryRunButton runId={run.id} />
                     )}
                   </div>
                   {run.error && (
                     <p className="text-sm text-red-500">{run.error}</p>
+                  )}
+                  {run.status === 'WAITING' && run.retryAt && (
+                    <p className="text-sm text-muted-foreground">
+                      A rate-limited action is scheduled to retry after{' '}
+                      {formatDate(run.retryAt)}.
+                    </p>
                   )}
                   {unconfirmed && (
                     <p className="text-sm text-muted-foreground">

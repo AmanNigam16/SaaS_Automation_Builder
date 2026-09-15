@@ -2,15 +2,25 @@
 
 import { randomUUID } from 'crypto'
 import { auth } from '@clerk/nextjs'
+import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import {
+  deleteScheduledJob,
   executeDurableWorkflowRun,
   parseFlowSteps,
 } from '@/lib/workflow-runner'
 import { validateWorkflowForPublish } from '@/lib/workflow-validation'
 
 const STALE_RUN_MS = 15 * 60 * 1000
+
+const getRequestBaseUrl = () => {
+  const requestHeaders = headers()
+  const host =
+    requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host')
+  const protocol = requestHeaders.get('x-forwarded-proto') ?? 'https'
+  return host ? `${protocol}://${host}` : undefined
+}
 
 export const runWorkflowNow = async (workflowId: string) => {
   const { userId } = auth()
@@ -28,6 +38,7 @@ export const runWorkflowNow = async (workflowId: string) => {
     eventId: `manual:${randomUUID()}`,
     triggerType: 'Manual run',
     metadata: { requestedBy: 'user' },
+    baseUrl: getRequestBaseUrl(),
   })
 
   revalidatePath('/logs')
@@ -60,13 +71,14 @@ export const retryWorkflowRun = async (runId: string) => {
   if (
     !(
       run.status === 'QUEUED' ||
+      run.status === 'WAITING' ||
       run.status === 'FAILED' ||
       run.status === 'PAUSED' ||
       isStaleRunning
     )
   ) {
     return {
-      message: 'Only queued, failed, paused, or interrupted runs can be retried',
+      message: 'Only waiting, queued, failed, paused, or interrupted runs can be retried',
     }
   }
 
@@ -99,6 +111,10 @@ export const retryWorkflowRun = async (runId: string) => {
   )
   if (startStepIndex < 0) return { message: 'This run has no retryable step' }
 
+  if (run.status === 'WAITING') {
+    await deleteScheduledJob(run.retryJobId ?? undefined).catch(() => undefined)
+  }
+
   const result = await executeDurableWorkflowRun(
     run.workflow,
     steps,
@@ -106,12 +122,14 @@ export const retryWorkflowRun = async (runId: string) => {
       eventId: run.triggerEventId,
       triggerType: run.triggerType,
       metadata: run.input ?? undefined,
+      baseUrl: getRequestBaseUrl(),
     },
     {
       runId: run.id,
       startStepIndex,
       nextAttemptByStep,
       reservedStepIndexes,
+      retryCount: run.retryCount,
     }
   )
 
@@ -120,6 +138,8 @@ export const retryWorkflowRun = async (runId: string) => {
     message:
       result.status === 'succeeded'
         ? 'Workflow retry completed'
+        : result.status === 'waiting'
+          ? 'Workflow is scheduled for a safe retry'
         : result.status === 'failed'
           ? 'Retry failed. See Logs for details.'
           : 'This run is already being handled',
