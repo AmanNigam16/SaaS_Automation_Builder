@@ -32,13 +32,10 @@ import { onGetNodesEdges } from '../../../_actions/workflow-connections'
 
 type Props = {}
 
-const initialNodes: EditorNodeType[] = []
-
 const initialEdges: { id: string; source: string; target: string; sourceHandle?: string | null }[] = []
 
 const EditorCanvas = (props: Props) => {
   const { dispatch, state } = useEditor()
-  const [nodes, setNodes] = useState(initialNodes)
   const [edges, setEdges] = useState(initialEdges)
   const [isWorkFlowLoading, setIsWorkFlowLoading] = useState<boolean>(false)
   const [reactFlowInstance, setReactFlowInstance] =
@@ -52,10 +49,15 @@ const EditorCanvas = (props: Props) => {
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      //@ts-ignore
-      setNodes((nds) => applyNodeChanges(changes, nds))
+      dispatch({
+        type: 'LOAD_DATA',
+        payload: {
+          edges,
+          elements: applyNodeChanges(changes, state.editor.elements) as EditorNodeType[],
+        },
+      })
     },
-    [setNodes]
+    [dispatch, edges, state.editor.elements]
   )
 
   const onEdgesChange = useCallback(
@@ -123,10 +125,15 @@ const EditorCanvas = (props: Props) => {
           type: type,
         },
       }
-      //@ts-ignore
-      setNodes((nds) => nds.concat(newNode))
+      dispatch({
+        type: 'LOAD_DATA',
+        payload: {
+          edges,
+          elements: state.editor.elements.concat(newNode as EditorNodeType),
+        },
+      })
     },
-    [reactFlowInstance, state]
+    [dispatch, edges, reactFlowInstance, state.editor.elements]
   )
 
   const handleClickCanvas = () => {
@@ -151,12 +158,8 @@ const EditorCanvas = (props: Props) => {
   }
 
   useEffect(() => {
-    dispatch({ type: 'LOAD_DATA', payload: { edges, elements: nodes } })
-  }, [dispatch, nodes, edges])
-
-  useEffect(() => {
-    setNodes(state.editor.elements)
-  }, [state.editor.elements])
+    dispatch({ type: 'LOAD_DATA', payload: { edges, elements: state.editor.elements } })
+  }, [dispatch, edges, state.editor.elements])
 
   const nodeTypes = useMemo(
     () => ({
@@ -182,11 +185,16 @@ const EditorCanvas = (props: Props) => {
     setIsWorkFlowLoading(true)
     const response = await onGetNodesEdges(pathname.split('/').pop()!)
     if (response) {
-        setEdges(response.edges ? JSON.parse(response.edges) : [])
-        setNodes(response.nodes ? JSON.parse(response.nodes) : [])
+      const loadedEdges = response.edges ? JSON.parse(response.edges) : []
+      const loadedNodes = response.nodes ? JSON.parse(response.nodes) : []
+      setEdges(loadedEdges)
+      dispatch({
+        type: 'LOAD_DATA',
+        payload: { edges: loadedEdges, elements: loadedNodes },
+      })
     }
     setIsWorkFlowLoading(false)
-  }, [pathname])
+  }, [dispatch, pathname])
 
   useEffect(() => {
     onGetWorkFlow()
