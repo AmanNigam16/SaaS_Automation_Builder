@@ -9,6 +9,9 @@ export const EXECUTABLE_NODE_TYPES = new Set([
   'Loop',
   'Email',
   'Google Calendar',
+  'AI',
+  'Custom Webhook',
+  'Google Drive Action',
 ])
 
 export type WorkflowValue =
@@ -23,6 +26,20 @@ export type WorkflowContext = {
   trigger: Record<string, WorkflowValue>
   steps: Record<string, Record<string, WorkflowValue>>
   loop?: { item: WorkflowValue; index: number; items: WorkflowValue[] }
+}
+
+export const matchesDriveTrigger = (
+  config: WorkflowNodeConfig,
+  metadata: Record<string, WorkflowValue>
+) => {
+  if (config.triggerFileId?.trim() && metadata.fileId !== config.triggerFileId.trim()) return false
+  if (config.triggerFolderId?.trim()) {
+    const parents = Array.isArray(metadata.parentIds) ? metadata.parentIds : []
+    if (!parents.includes(config.triggerFolderId.trim())) return false
+  }
+  if (config.triggerChange === 'removed' && metadata.removed !== true) return false
+  if (config.triggerChange === 'created_or_updated' && metadata.removed === true) return false
+  return true
 }
 
 export type ConditionOperator =
@@ -44,6 +61,13 @@ export type WorkflowNodeConfig = {
     | 'calendar_create'
     | 'calendar_update'
     | 'calendar_delete'
+    | 'drive_upload'
+    | 'drive_move'
+    | 'drive_rename'
+    | 'drive_copy'
+    | 'drive_share'
+    | 'drive_download'
+    | 'drive_metadata'
   to?: string
   cc?: string
   bcc?: string
@@ -60,6 +84,31 @@ export type WorkflowNodeConfig = {
   attendees?: string
   reminderMinutes?: number
   conflictPolicy?: 'allow' | 'stop'
+  aiMode?: 'generate' | 'summarize' | 'classify' | 'extract'
+  prompt?: string
+  systemInstruction?: string
+  structuredOutput?: boolean
+  model?: 'gemini-2.5-flash'
+  temperature?: number
+  maxOutputTokens?: number
+  webhookMethod?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  webhookUrl?: string
+  webhookHeaders?: string
+  webhookQuery?: string
+  webhookBody?: string
+  fileId?: string
+  parentFolderId?: string
+  newName?: string
+  copyName?: string
+  permissionEmail?: string
+  permissionRole?: 'reader' | 'commenter' | 'writer'
+  uploadName?: string
+  uploadMimeType?: string
+  uploadContent?: string
+  uploadEncoding?: 'text' | 'base64'
+  triggerFileId?: string
+  triggerFolderId?: string
+  triggerChange?: 'any' | 'created_or_updated' | 'removed'
   template?: string
   conditionMode?: 'branch' | 'filter'
   combinator?: 'and' | 'or'
@@ -114,7 +163,8 @@ export const WORKFLOW_NODE_SCHEMAS: Record<
   string,
   { inputs: Record<string, FieldType>; outputs: Record<string, FieldType> }
 > = {
-  'Google Drive': { inputs: {}, outputs: { fileId: 'string', fileName: 'string', mimeType: 'string', modifiedTime: 'date', removed: 'boolean', resourceState: 'string' } },
+  'Google Drive': { inputs: {}, outputs: { fileId: 'string', fileName: 'string', mimeType: 'string', modifiedTime: 'date', removed: 'boolean', resourceState: 'string', parentIds: 'list' } },
+  'Google Drive Action': { inputs: { fileId: 'string' }, outputs: { fileId: 'string', fileName: 'string', mimeType: 'string', webViewLink: 'string', contentBase64: 'string', deleted: 'boolean' } },
   Discord: { inputs: { message: 'string' }, outputs: { message: 'string' } },
   Slack: { inputs: { message: 'string' }, outputs: { message: 'string' } },
   Notion: { inputs: { properties: 'object' }, outputs: { message: 'string' } },
@@ -123,8 +173,8 @@ export const WORKFLOW_NODE_SCHEMAS: Record<
   Wait: { inputs: { duration: 'number', until: 'date' }, outputs: { resumedAt: 'date' } },
   Loop: { inputs: { items: 'list' }, outputs: { item: 'any', index: 'number', items: 'list' } },
   Email: { inputs: { to: 'string', subject: 'string', body: 'string' }, outputs: { messageId: 'string', draftId: 'string', threadId: 'string' } },
-  AI: { inputs: { prompt: 'string' }, outputs: { result: 'any' } },
-  'Custom Webhook': { inputs: { request: 'object' }, outputs: { response: 'object' } },
+  AI: { inputs: { prompt: 'string' }, outputs: { result: 'any', text: 'string', inputTokens: 'number', outputTokens: 'number' } },
+  'Custom Webhook': { inputs: { request: 'object' }, outputs: { status: 'number', body: 'any' } },
   'Google Calendar': { inputs: { event: 'object' }, outputs: { eventId: 'string', eventUrl: 'string', deleted: 'boolean' } },
   Trigger: { inputs: {}, outputs: { data: 'object' } },
   Action: { inputs: { data: 'any' }, outputs: { result: 'any' } },
@@ -222,6 +272,57 @@ export const validateWorkflowNodeConfig = (node: WorkflowPlanNode): string | nul
     ) {
       return 'Reminder must be between 0 and 40320 minutes'
     }
+  }
+  if (node.type === 'AI') {
+    if (!config.prompt?.trim()) return 'Add an AI prompt'
+    if (
+      config.temperature !== undefined &&
+      (!Number.isFinite(config.temperature) || config.temperature < 0 || config.temperature > 2)
+    ) {
+      return 'AI temperature must be between 0 and 2'
+    }
+    if (
+      config.maxOutputTokens !== undefined &&
+      (!Number.isInteger(config.maxOutputTokens) || config.maxOutputTokens < 1 || config.maxOutputTokens > 8192)
+    ) {
+      return 'AI output limit must be between 1 and 8192 tokens'
+    }
+  }
+  if (node.type === 'Custom Webhook') {
+    if (!config.webhookUrl?.trim()) return 'Add an HTTPS webhook URL'
+    if (!config.webhookUrl.includes('{{')) {
+      try {
+        if (new URL(config.webhookUrl).protocol !== 'https:') return 'Webhook URL must use HTTPS'
+      } catch {
+        return 'Webhook URL is invalid'
+      }
+    }
+    for (const [value, label] of [
+      [config.webhookHeaders, 'Webhook headers'],
+      [config.webhookQuery, 'Webhook query'],
+    ] as const) {
+      if (!value?.trim()) continue
+      try {
+        const parsed = JSON.parse(value)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error()
+      } catch {
+        return `${label} must be a JSON object`
+      }
+    }
+  }
+  if (node.type === 'Google Drive Action') {
+    const operation = config.operation ?? ''
+    if (!operation.startsWith('drive_')) return 'Choose a Google Drive action'
+    if (operation === 'drive_upload') {
+      if (!config.uploadName?.trim() || !config.uploadContent?.trim()) {
+        return 'Complete the upload file name and content'
+      }
+    } else if (!config.fileId?.trim()) {
+      return 'Choose a Drive file or provide its ID'
+    }
+    if (operation === 'drive_move' && !config.parentFolderId?.trim()) return 'Destination folder ID is required'
+    if (operation === 'drive_rename' && !config.newName?.trim()) return 'New file name is required'
+    if (operation === 'drive_share' && !config.permissionEmail?.trim()) return 'Share recipient email is required'
   }
   return null
 }
@@ -337,7 +438,7 @@ export const compileWorkflowGraph = (
   }
 
   const plan: WorkflowPlan = { version: 1, triggerId: roots[0].id, nodes, edges }
-  return { valid: true as const, plan, steps: nodes.filter((node) => node.type !== 'Google Drive').map((node) => node.type) }
+  return { valid: true as const, plan, steps: nodes.filter((node) => node.id !== plan.triggerId).map((node) => node.type) }
 }
 
 export const parseWorkflowPlan = (value: string | null | undefined): WorkflowPlan | null => {

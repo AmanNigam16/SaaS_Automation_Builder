@@ -4,6 +4,7 @@ import {
   applyFormatter,
   evaluateCondition,
   getWaitUntil,
+  matchesDriveTrigger,
   resolveExpression,
   type WorkflowContext,
 } from '../src/lib/workflow-semantics.ts'
@@ -84,4 +85,13 @@ test('calculates bounded duration waits', () => {
     getWaitUntil({ waitMode: 'until', until: '2026-09-16T12:00:00Z' }, now).toISOString(),
     '2026-09-16T12:00:00.000Z'
   )
+})
+
+test('matches Drive trigger file, folder, and change filters', () => {
+  const metadata = { fileId: 'file-1', parentIds: ['folder-1'], removed: false }
+  assert.equal(matchesDriveTrigger({}, metadata), true)
+  assert.equal(matchesDriveTrigger({ triggerFileId: 'file-1', triggerFolderId: 'folder-1', triggerChange: 'created_or_updated' }, metadata), true)
+  assert.equal(matchesDriveTrigger({ triggerFileId: 'file-2' }, metadata), false)
+  assert.equal(matchesDriveTrigger({ triggerFolderId: 'folder-2' }, metadata), false)
+  assert.equal(matchesDriveTrigger({ triggerChange: 'removed' }, metadata), false)
 })

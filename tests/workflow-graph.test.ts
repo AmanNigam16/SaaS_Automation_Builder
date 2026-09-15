@@ -20,7 +20,7 @@ test('accepts a connected linear supported workflow', () => {
   }
 })
 
-test('rejects unsupported nodes and branching from ordinary actions', () => {
+test('rejects incomplete actions and branching from ordinary actions', () => {
   const unsupported = validateLinearWorkflowGraph(
     JSON.stringify([
       { id: 'trigger', type: 'Google Drive' },
@@ -28,10 +28,7 @@ test('rejects unsupported nodes and branching from ordinary actions', () => {
     ]),
     JSON.stringify([{ source: 'trigger', target: 'ai' }])
   )
-  assert.deepEqual(unsupported, {
-    valid: false,
-    message: 'AI is not executable yet',
-  })
+  assert.deepEqual(unsupported, { valid: false, message: 'Add an AI prompt' })
 
   const branching = validateLinearWorkflowGraph(
     JSON.stringify([
@@ -118,4 +115,48 @@ test('rejects incomplete Gmail and Calendar actions', () => {
   )
   assert.equal(calendar.valid, false)
   if (!calendar.valid) assert.equal(calendar.message, 'Event ID is required for this calendar operation')
+})
+
+test('accepts configured AI and outbound webhook actions', () => {
+  const result = validateLinearWorkflowGraph(
+    JSON.stringify([
+      { id: 'trigger', type: 'Google Drive' },
+      { id: 'ai', type: 'AI', data: { metadata: { aiMode: 'summarize', prompt: '{{trigger.fileName}}' } } },
+      { id: 'hook', type: 'Custom Webhook', data: { metadata: { webhookMethod: 'POST', webhookUrl: 'https://example.com/hook', webhookHeaders: '{}', webhookQuery: '{}' } } },
+    ]),
+    JSON.stringify([
+      { source: 'trigger', target: 'ai' },
+      { source: 'ai', target: 'hook' },
+    ])
+  )
+  assert.equal(result.valid, true)
+  if (result.valid) assert.deepEqual(result.steps, ['AI', 'Custom Webhook'])
+})
+
+test('rejects unsafe or incomplete AI and webhook actions', () => {
+  const ai = validateLinearWorkflowGraph(
+    JSON.stringify([{ id: 'trigger', type: 'Google Drive' }, { id: 'ai', type: 'AI', data: { metadata: {} } }]),
+    JSON.stringify([{ source: 'trigger', target: 'ai' }])
+  )
+  assert.equal(ai.valid, false)
+  if (!ai.valid) assert.equal(ai.message, 'Add an AI prompt')
+
+  const webhook = validateLinearWorkflowGraph(
+    JSON.stringify([{ id: 'trigger', type: 'Google Drive' }, { id: 'hook', type: 'Custom Webhook', data: { metadata: { webhookUrl: 'http://localhost/hook' } } }]),
+    JSON.stringify([{ source: 'trigger', target: 'hook' }])
+  )
+  assert.equal(webhook.valid, false)
+  if (!webhook.valid) assert.equal(webhook.message, 'Webhook URL must use HTTPS')
+})
+
+test('accepts configured Google Drive actions without confusing them with the trigger', () => {
+  const result = validateLinearWorkflowGraph(
+    JSON.stringify([
+      { id: 'trigger', type: 'Google Drive', data: { metadata: { triggerFolderId: 'folder-1' } } },
+      { id: 'drive-action', type: 'Google Drive Action', data: { metadata: { operation: 'drive_copy', fileId: '{{trigger.fileId}}' } } },
+    ]),
+    JSON.stringify([{ source: 'trigger', target: 'drive-action' }])
+  )
+  assert.equal(result.valid, true)
+  if (result.valid) assert.deepEqual(result.steps, ['Google Drive Action'])
 })

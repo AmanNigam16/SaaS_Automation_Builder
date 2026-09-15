@@ -63,6 +63,9 @@ export const validateWorkflowForPublish = async (
     ...(graph.steps.includes('Google Calendar')
       ? ['https://www.googleapis.com/auth/calendar']
       : []),
+    ...(graph.steps.includes('Google Drive Action')
+      ? ['https://www.googleapis.com/auth/drive']
+      : []),
   ]
   if (
     requiredGoogleScopes.some(
@@ -72,6 +75,13 @@ export const validateWorkflowForPublish = async (
     return {
       valid: false as const,
       message: 'Reconnect Google to grant the permissions required by this workflow',
+    }
+  }
+
+  if (graph.steps.includes('AI') && !process.env.GEMINI_API_KEY) {
+    return {
+      valid: false as const,
+      message: 'Configure the Gemini API key before publishing AI actions',
     }
   }
 

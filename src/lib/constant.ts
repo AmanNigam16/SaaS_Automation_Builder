@@ -145,6 +145,10 @@ export const EditorCanvasDefaultCardTypes = {
     description: 'Delay the next action step by using the wait timer.',
     type: 'Action',
   },
+  'Google Drive Action': {
+    description: 'Upload, organize, share, or inspect a Drive file.',
+    type: 'Action',
+  },
   Formatter: {
     description: 'Transform text, numbers, dates, JSON, or lists.',
     type: 'Action',

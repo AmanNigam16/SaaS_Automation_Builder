@@ -125,6 +125,12 @@ const EditorCanvas = (props: Props) => {
                       ? { operation: 'gmail_send', to: '', subject: '', body: '' }
                       : type === 'Google Calendar'
                         ? { operation: 'calendar_create', calendarId: 'primary', timeZone: 'UTC', conflictPolicy: 'allow' }
+                        : type === 'AI'
+                          ? { aiMode: 'generate', model: 'gemini-2.5-flash', prompt: '', temperature: 0.3, maxOutputTokens: 1024 }
+                        : type === 'Custom Webhook'
+                          ? { webhookMethod: 'POST', webhookUrl: '', webhookHeaders: '{}', webhookQuery: '{}', webhookBody: '{}' }
+                          : type === 'Google Drive Action'
+                            ? { operation: 'drive_metadata', fileId: '' }
                     : {},
           type: type,
         },
@@ -174,6 +180,7 @@ const EditorCanvas = (props: Props) => {
       AI: EditorCanvasCardSingle,
       Slack: EditorCanvasCardSingle,
       'Google Drive': EditorCanvasCardSingle,
+      'Google Drive Action': EditorCanvasCardSingle,
       Notion: EditorCanvasCardSingle,
       Discord: EditorCanvasCardSingle,
       'Custom Webhook': EditorCanvasCardSingle,

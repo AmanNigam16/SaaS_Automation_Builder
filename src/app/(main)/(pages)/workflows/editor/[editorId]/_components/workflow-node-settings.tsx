@@ -34,6 +34,9 @@ const CONFIGURABLE_TYPES = new Set([
   'Google Drive',
   'Email',
   'Google Calendar',
+  'AI',
+  'Custom Webhook',
+  'Google Drive Action',
 ])
 
 const conditionOperators: Array<{ value: ConditionOperator; label: string }> = [
@@ -353,6 +356,56 @@ const WorkflowNodeSettings = () => {
             <select className={selectClassName} value={config.conflictPolicy ?? 'allow'} onChange={(event) => update({ conflictPolicy: event.target.value as 'allow' | 'stop' })}><option value="allow">Allow calendar conflicts</option><option value="stop">Stop when time is busy</option></select>
             <FieldPicker fields={availableFields} onPick={(field) => update({ description: `${config.description ?? ''}${field}` })} />
           </>}
+        </div>
+      )}
+
+      {selected.type === 'AI' && (
+        <div className="space-y-3">
+          <div className="space-y-2"><Label>Mode</Label><select className={selectClassName} value={config.aiMode ?? 'generate'} onChange={(event) => update({ aiMode: event.target.value as WorkflowNodeConfig['aiMode'] })}><option value="generate">Generate</option><option value="summarize">Summarize</option><option value="classify">Classify</option><option value="extract">Extract</option></select></div>
+          <Textarea value={config.systemInstruction ?? ''} placeholder="System instruction (optional)" onChange={(event) => update({ systemInstruction: event.target.value })} />
+          <Textarea value={config.prompt ?? ''} placeholder="Prompt or {{field}}" onChange={(event) => update({ prompt: event.target.value })} />
+          <FieldPicker fields={availableFields} onPick={(field) => update({ prompt: `${config.prompt ?? ''}${field}` })} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.structuredOutput ?? false} onChange={(event) => update({ structuredOutput: event.target.checked })} /> Return structured JSON</label>
+          <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label>Temperature</Label><Input type="number" min={0} max={2} step={0.1} value={config.temperature ?? 0.3} onChange={(event) => update({ temperature: Number(event.target.value) })} /></div><div className="space-y-2"><Label>Max output tokens</Label><Input type="number" min={1} max={8192} value={config.maxOutputTokens ?? 1024} onChange={(event) => update({ maxOutputTokens: Number(event.target.value) })} /></div></div>
+        </div>
+      )}
+
+      {selected.type === 'Custom Webhook' && (
+        <div className="space-y-3">
+          <div className="space-y-2"><Label>Method</Label><select className={selectClassName} value={config.webhookMethod ?? 'POST'} onChange={(event) => update({ webhookMethod: event.target.value as WorkflowNodeConfig['webhookMethod'] })}>{['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => <option key={method} value={method}>{method}</option>)}</select></div>
+          <Input value={config.webhookUrl ?? ''} placeholder="https://api.example.com/hook" onChange={(event) => update({ webhookUrl: event.target.value })} />
+          <Textarea value={config.webhookQuery ?? '{}'} placeholder='Query JSON, for example {"id":"{{trigger.fileId}}"}' onChange={(event) => update({ webhookQuery: event.target.value })} />
+          <Textarea value={config.webhookHeaders ?? '{}'} placeholder='Non-secret header JSON' onChange={(event) => update({ webhookHeaders: event.target.value })} />
+          {!['GET', 'DELETE'].includes(config.webhookMethod ?? 'POST') && <Textarea value={config.webhookBody ?? '{}'} placeholder='JSON or text request body' onChange={(event) => update({ webhookBody: event.target.value })} />}
+          <p className="text-xs text-muted-foreground">Do not paste API keys here. Secret fields will be added with encrypted connection management.</p>
+          <FieldPicker fields={availableFields} onPick={(field) => update({ webhookBody: `${config.webhookBody ?? ''}${field}` })} />
+        </div>
+      )}
+
+      {selected.type === 'Google Drive' && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Leave filters empty to run for every Drive change.</p>
+          <Input value={config.triggerFileId ?? ''} placeholder="Only this file ID (optional)" onChange={(event) => update({ triggerFileId: event.target.value })} />
+          <Input value={config.triggerFolderId ?? ''} placeholder="Only files in this folder ID (optional)" onChange={(event) => update({ triggerFolderId: event.target.value })} />
+          <select className={selectClassName} value={config.triggerChange ?? 'any'} onChange={(event) => update({ triggerChange: event.target.value as WorkflowNodeConfig['triggerChange'] })}><option value="any">Any change</option><option value="created_or_updated">New or updated files</option><option value="removed">Removed files</option></select>
+        </div>
+      )}
+
+      {selected.type === 'Google Drive Action' && (
+        <div className="space-y-3">
+          <div className="space-y-2"><Label>Action</Label><select className={selectClassName} value={config.operation ?? 'drive_metadata'} onChange={(event) => update({ operation: event.target.value as WorkflowNodeConfig['operation'] })}><option value="drive_upload">Upload file</option><option value="drive_move">Move file</option><option value="drive_rename">Rename file</option><option value="drive_copy">Copy file</option><option value="drive_share">Share file</option><option value="drive_download">Download file data</option><option value="drive_metadata">Get metadata</option></select></div>
+          {config.operation === 'drive_upload' ? <>
+            <Input value={config.uploadName ?? ''} placeholder="File name" onChange={(event) => update({ uploadName: event.target.value })} />
+            <Input value={config.uploadMimeType ?? 'text/plain'} placeholder="MIME type" onChange={(event) => update({ uploadMimeType: event.target.value })} />
+            <Input value={config.parentFolderId ?? ''} placeholder="Parent folder ID (optional)" onChange={(event) => update({ parentFolderId: event.target.value })} />
+            <select className={selectClassName} value={config.uploadEncoding ?? 'text'} onChange={(event) => update({ uploadEncoding: event.target.value as 'text' | 'base64' })}><option value="text">Plain text content</option><option value="base64">Base64 content</option></select>
+            <Textarea value={config.uploadContent ?? ''} placeholder="File content or {{field}}" onChange={(event) => update({ uploadContent: event.target.value })} />
+          </> : <Input value={config.fileId ?? ''} placeholder="File ID or {{trigger.fileId}}" onChange={(event) => update({ fileId: event.target.value })} />}
+          {config.operation === 'drive_move' && <Input value={config.parentFolderId ?? ''} placeholder="Destination folder ID" onChange={(event) => update({ parentFolderId: event.target.value })} />}
+          {config.operation === 'drive_rename' && <Input value={config.newName ?? ''} placeholder="New file name" onChange={(event) => update({ newName: event.target.value })} />}
+          {config.operation === 'drive_copy' && <><Input value={config.copyName ?? ''} placeholder="Copy name (optional)" onChange={(event) => update({ copyName: event.target.value })} /><Input value={config.parentFolderId ?? ''} placeholder="Destination folder ID (optional)" onChange={(event) => update({ parentFolderId: event.target.value })} /></>}
+          {config.operation === 'drive_share' && <><Input value={config.permissionEmail ?? ''} placeholder="Recipient email" onChange={(event) => update({ permissionEmail: event.target.value })} /><select className={selectClassName} value={config.permissionRole ?? 'reader'} onChange={(event) => update({ permissionRole: event.target.value as WorkflowNodeConfig['permissionRole'] })}><option value="reader">Viewer</option><option value="commenter">Commenter</option><option value="writer">Editor</option></select></>}
+          <FieldPicker fields={availableFields} onPick={(field) => config.operation === 'drive_upload' ? update({ uploadContent: field }) : update({ fileId: field })} />
         </div>
       )}
 

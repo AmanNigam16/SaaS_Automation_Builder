@@ -51,6 +51,7 @@ const EditorCanvasIconHelper = ({ type }: Props) => {
         />
       )
     case 'Google Drive':
+    case 'Google Drive Action':
       return (
         <HardDrive
           className="flex-shrink-0"

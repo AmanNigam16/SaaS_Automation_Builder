@@ -29,6 +29,7 @@ export type EditorCanvasTypes =
   | 'AI'
   | 'Slack'
   | 'Google Drive'
+  | 'Google Drive Action'
   | 'Notion'
   | 'Discord'
   | 'Custom Webhook'

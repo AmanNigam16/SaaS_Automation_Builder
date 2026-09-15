@@ -6,6 +6,9 @@ import { postContentToWebHook } from '@/app/(main)/(pages)/connections/_actions/
 import { onCreateNewPageInDatabase } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
 import { postMessageToSlack } from '@/app/(main)/(pages)/connections/_actions/slack-connection'
 import { executeCalendarAction, executeGmailAction } from '@/lib/google-workspace'
+import { executeAiAction } from '@/lib/ai-action'
+import { executeOutboundWebhook } from '@/lib/outbound-webhook'
+import { executeGoogleDriveAction } from '@/lib/google-drive-action'
 import {
   applyFormatter,
   evaluateCondition,
@@ -218,6 +221,18 @@ const prepareAction = async (
 
   if (step === 'Google Calendar') {
     return () => executeCalendarAction(flow.userId, config, context!)
+  }
+
+  if (step === 'AI') {
+    return () => executeAiAction(config, context!)
+  }
+
+  if (step === 'Custom Webhook') {
+    return () => executeOutboundWebhook(config, context!)
+  }
+
+  if (step === 'Google Drive Action') {
+    return () => executeGoogleDriveAction(flow.userId, config, context!)
   }
 
   throw new Error(`${step} is not executable`)

@@ -26,9 +26,10 @@ export async function listBotChannels(
 
   const { data } = await axios.get(url, {
     headers: { Authorization: `Bearer ${slackAccessToken}` },
+    timeout: 10_000,
   })
 
-  if (!data.ok) throw new Error(data.error)
+  if (!data.ok) throw new Error('Slack could not list channels. Check the app permissions and reconnect.')
   if (!data?.channels?.length) return []
 
   return data.channels

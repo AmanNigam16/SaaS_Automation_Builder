@@ -7,6 +7,7 @@ import {
   executeDurableWorkflowRun,
   parseFlowSteps,
 } from '@/lib/workflow-runner'
+import { matchesDriveTrigger } from '@/lib/workflow-semantics'
 
 const MAX_CONCURRENT_WORKFLOWS = 4
 
@@ -83,6 +84,10 @@ export async function POST(req: NextRequest) {
   const workflows = await db.workflows.findMany({
     where: { userId: user.clerkId, publish: true },
   })
+  const workflowExecutions = workflows.map((flow) => ({
+    flow,
+    steps: parseFlowSteps(flow.flowPath),
+  }))
 
   const counts = { changes: 0, started: 0, succeeded: 0, failed: 0, duplicates: 0 }
   let currentPageToken = pageToken
@@ -93,7 +98,7 @@ export async function POST(req: NextRequest) {
       includeRemoved: true,
       supportsAllDrives: true,
       fields:
-        'nextPageToken,newStartPageToken,changes(fileId,removed,time,file(id,name,mimeType,modifiedTime,trashed))',
+        'nextPageToken,newStartPageToken,changes(fileId,removed,time,file(id,name,mimeType,modifiedTime,trashed,parents))',
     })
 
     const changes = (response.data.changes ?? []).map((change, index) => {
@@ -110,6 +115,7 @@ export async function POST(req: NextRequest) {
           modifiedTime: change.file?.modifiedTime ?? change.time ?? null,
           removed: change.removed ?? false,
           resourceState,
+          parentIds: change.file?.parents ?? [],
         },
       }
     })
@@ -117,11 +123,16 @@ export async function POST(req: NextRequest) {
     for (const change of changes) {
       counts.changes++
 
-      for (let offset = 0; offset < workflows.length; offset += MAX_CONCURRENT_WORKFLOWS) {
-        const batch = workflows.slice(offset, offset + MAX_CONCURRENT_WORKFLOWS)
+      const matchingWorkflows = workflowExecutions.filter(({ steps }) => {
+        if (Array.isArray(steps)) return true
+        const triggerNode = steps.nodes.find((node) => node.id === steps.triggerId)
+        return triggerNode ? matchesDriveTrigger(triggerNode.config, change.metadata) : false
+      })
+      for (let offset = 0; offset < matchingWorkflows.length; offset += MAX_CONCURRENT_WORKFLOWS) {
+        const batch = matchingWorkflows.slice(offset, offset + MAX_CONCURRENT_WORKFLOWS)
         const results = await Promise.all(
-          batch.map((flow) =>
-            executeDurableWorkflowRun(flow, parseFlowSteps(flow.flowPath), {
+          batch.map(({ flow, steps }) =>
+            executeDurableWorkflowRun(flow, steps, {
               eventId: change.eventId,
               triggerType: 'Google Drive',
               metadata: change.metadata,
