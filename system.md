@@ -60,7 +60,7 @@ Both edits were later included in the development-branch foundation commit and p
 
 - The protected deployed `main` checkpoint still has the original Google Drive OAuth callback behavior. The corrected implementation is deployed only to the development Preview; its OAuth return and isolated credential persistence have been verified. The production database had no saved Google credential/resource record for the test user at its earlier inspection time.
 - The development Preview's Google card shows Connected only for an app-managed credential saved after a successful Drive `about.get` check; an independent file-list request and long-term refresh behavior still need verification.
-- Email, AI, Condition, Custom Webhook, Google Calendar, generic Trigger, and generic Action nodes are primarily or entirely frontend-only.
+- On the development branch, Email, AI, Condition, outbound Custom Webhook, and Google Calendar have backend execution paths. Generic Trigger and generic Action remain non-executable; provider action writes are not yet verified end to end. The protected `main` branch still has the older frontend-only behavior.
 - Existing published workflows are not reliable end-to-end automations; observed graphs include unsupported AI nodes and incomplete templates/configuration.
 - The development branch now has durable linear run/step history, per-Drive-change deduplication, explicit failed/interrupted-run replay, and action-level credit reservation. It still lacks branching, resumable per-run waits, provider-delivered idempotency for every external write, and authenticated Drive-trigger end-to-end proof; production `main` does not have the branch implementation.
 - The branch now implements Google disconnect, reconnect/change-account, account labeling, refresh-token rotation, revocation, and truthful reconnect-required state. Multi-account behavior and equivalent lifecycle controls for the other providers remain.
@@ -243,15 +243,15 @@ Complete the currently weak product surfaces:
 - Add accessibility, responsive, security, and full browser E2E checks.
 - Document architecture, tradeoffs, real-world use cases, screenshots, and a demo video.
 
-Current position: **Phase 4 implementation complete locally; delivery verification pending** on `codex/phase-1-foundation`. Phase 1–3 implementation is complete for the roadmap's current supported subset; intentionally skipped integration tests must not be described as verified. Phase 4 supplies executable actions for Gmail, Calendar, Drive, outbound webhooks, and Gemini AI. Automatic Gmail/Calendar/inbound-webhook triggers and subscription renewal remain Phase 5 lifecycle work and must not be presented as active. Use only this original eight-phase numbering for planning and status.
+Current position: **Phase 4 action implementation is deployed to Preview; provider execution remains unverified** on `codex/phase-1-foundation`. Phase 1–3 implementation is complete for the roadmap's current supported subset; intentionally skipped integration tests must not be described as verified. Phase 4 supplies executable actions for Gmail, Calendar, Drive, outbound webhooks, and Gemini AI. Automatic Gmail/Calendar/inbound-webhook triggers and subscription renewal remain Phase 5 lifecycle work; encrypted secret fields and consistent provider account management remain Phase 6. These roadmap dependencies and omitted live provider tests prevent a claim that all original Phase 4 acceptance criteria are complete. Use only this original eight-phase numbering for planning and status.
 
 ## Current pass
 
-- Date: 2026-09-15 (Asia/Calcutta)
-- Status: Phase 3 remains complete. Phase 4 now has locally verified Gmail send/draft and Calendar create/update/delete configuration, graph validation, required-scope publish validation, durable-runner execution, action outputs, provider timeouts, Calendar reminders/attendees/timezone/conflict checks, and Gmail header-injection protection. Both integrations reuse the existing server-only Google OAuth credential; users with older grants must reconnect before publishing these actions. No real email or calendar mutation has been executed.
-- Next target: deliver and verify the second Phase 4 milestone, then begin Phase 5 triggering/scheduling. Phase 6 retains consistent provider account lifecycle, encrypted secrets, and dynamic account selection. Do not alter production or `main`.
-- Commit/push status: Phase 3 foundation `44337916241c20a8326047a629c5758ea4855585`, editor-state correction `83cabde990ea7a5798f496d1b4db8fd945052d59`, and Phase 4 Google Workspace actions `d8b4a4dbc2876ffa1f6dca34b4a6fa40227e9585` are pushed to `codex/phase-1-foundation`.
-- Deployment status: corrected Phase 3 Preview `dpl_CLdVRAGYySKwYwHGaP9joWrhB3nf` is READY on the stable branch alias and points to commit `83cabde`. Vercel Authentication/Standard Protection remains enabled. No merge, production deployment, production alias change, provider-console change, or database migration was performed for Phase 3.
+- Date: 2026-09-18 (Asia/Calcutta)
+- Status: Phase 3 remains complete. Phase 4 action implementations for Gmail, Calendar, Drive, outbound HTTPS requests, and Gemini AI have local checks and authenticated Preview UI checks. Older Google grants need reconnection for expanded scopes; Gemini publishing requires `GEMINI_API_KEY`. No live Gmail, Calendar, Drive mutation, webhook delivery, or Gemini request was executed.
+- Next target: Phase 5 trigger and subscription lifecycle. The original roadmap's remaining Phase 4 acceptance items include live provider execution, Gmail/Calendar triggers, inbound webhooks, AI routing/provider choice, and provider account parity. Trigger lifecycle belongs to Phase 5; encrypted secrets and provider account parity belong to Phase 6. Do not claim these are already active.
+- Commit/push status: Phase 4 Google Workspace actions `d8b4a4d` and integration actions `763e072` are pushed to `codex/phase-1-foundation`. The latter's Vercel Preview deployment `dpl_H2ns8GnZT61hmDT4zFyVjzper5Mb` reached READY on the stable branch alias.
+- Vercel Authentication/Standard Protection remains enabled. No merge, production deployment, production alias change, provider-console change, or database migration was performed for Phase 4.
 
 ### 2026-09-15 — Phase 4 Google Workspace action milestone
 
@@ -268,6 +268,11 @@ Current position: **Phase 4 implementation complete locally; delivery verificati
 - Removed an existing browser-console leak of the Notion access token and added a timeout plus safer permission guidance to Slack channel discovery. Full account lifecycle parity and removing provider tokens from legacy client editor state remain Phase 6 rather than being hidden by this pass.
 - No database schema, dependency, production setting, provider console, or `main` change was made. Automatic Gmail/Calendar/inbound-webhook triggering and Drive channel renewal scheduling require Phase 5 lifecycle infrastructure.
 - Local verification: 20/20 focused tests, TypeScript `--noEmit`, `git diff --check`, and Next lint pass; lint reports only existing hook warnings. The optimized production build completes all 22 routes. Branch Preview and authenticated browser verification remain required before marking delivery complete.
+
+### 2026-09-18 — Phase 4 Preview verification
+
+- Vercel Preview deployment `dpl_H2ns8GnZT61hmDT4zFyVjzper5Mb` for commit `763e072` reached READY and was assigned the stable branch Preview alias. In the authenticated Preview editor, unsaved nodes confirmed the Drive trigger's optional file/folder/change filters, Gemini AI mode/prompt/structured-output/limit controls, all seven Google Drive Action operations, and outbound Custom Webhook method/URL/query/headers/body controls. The initially blank AI panel was caused by the node not being selected; direct selection rendered the controls, with no code fix needed.
+- Corrected the outbound Custom Webhook palette description, which still described inbound delivery. No Save, Publish, Fetch sample data, Test configuration, provider call, workflow/database write, or credit charge was performed. Provider execution and delivery remain unverified. The Preview browser tab should be preserved for future checks.
 
 ## Change and verification log
 

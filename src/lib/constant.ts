@@ -121,8 +121,7 @@ export const EditorCanvasDefaultCardTypes = {
   },
   Notion: { description: 'Create entries directly in notion.', type: 'Action' },
   'Custom Webhook': {
-    description:
-      'Connect any app that has an API key and send data to your applicaiton.',
+    description: 'Send an HTTPS request to an external API.',
     type: 'Action',
   },
   Discord: {
