@@ -1,4 +1,5 @@
 export const EXECUTABLE_NODE_TYPES = new Set([
+  'Trigger',
   'Google Drive',
   'Discord',
   'Slack',
@@ -55,6 +56,22 @@ export type ConditionOperator =
   | 'is_false'
 
 export type WorkflowNodeConfig = {
+  triggerKind?: 'manual' | 'schedule' | 'gmail' | 'calendar' | 'webhook'
+  scheduleFrequency?: 'minute' | 'hour' | 'day' | 'week'
+  scheduleMinute?: number
+  scheduleHour?: number
+  scheduleWeekday?: number
+  scheduleTimeZone?: string
+  gmailFrom?: string
+  gmailTo?: string
+  gmailSubject?: string
+  gmailLabel?: string
+  gmailHasAttachment?: boolean
+  calendarTriggerMode?: 'new' | 'upcoming'
+  calendarTriggerId?: string
+  calendarUpcomingMinutes?: number
+  webhookRequireSignature?: boolean
+  triggerThrottleSeconds?: number
   operation?:
     | 'gmail_send'
     | 'gmail_create_draft'
@@ -84,7 +101,7 @@ export type WorkflowNodeConfig = {
   attendees?: string
   reminderMinutes?: number
   conflictPolicy?: 'allow' | 'stop'
-  aiMode?: 'generate' | 'summarize' | 'classify' | 'extract'
+  aiMode?: 'generate' | 'summarize' | 'classify' | 'extract' | 'route'
   prompt?: string
   systemInstruction?: string
   structuredOutput?: boolean
@@ -210,6 +227,38 @@ const asConfig = (value: unknown): WorkflowNodeConfig =>
 
 export const validateWorkflowNodeConfig = (node: WorkflowPlanNode): string | null => {
   const config = node.config
+  if (node.type === 'Trigger') {
+    if (!config.triggerKind) return 'Choose a trigger type'
+    if (config.triggerKind === 'schedule') {
+      if (!config.scheduleFrequency) return 'Choose a schedule frequency'
+      if (
+        config.scheduleMinute !== undefined &&
+        (!Number.isInteger(config.scheduleMinute) || config.scheduleMinute < 0 || config.scheduleMinute > 59)
+      ) return 'Schedule minute must be between 0 and 59'
+      if (
+        ['day', 'week'].includes(config.scheduleFrequency) &&
+        (!Number.isInteger(config.scheduleHour) || config.scheduleHour! < 0 || config.scheduleHour! > 23)
+      ) return 'Schedule hour must be between 0 and 23'
+      if (
+        config.scheduleFrequency === 'week' &&
+        (!Number.isInteger(config.scheduleWeekday) || config.scheduleWeekday! < 0 || config.scheduleWeekday! > 6)
+      ) return 'Choose a valid schedule weekday'
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: config.scheduleTimeZone ?? 'UTC' }).format()
+      } catch {
+        return 'Choose a valid IANA timezone'
+      }
+    }
+    if (
+      config.triggerKind === 'calendar' &&
+      config.calendarTriggerMode === 'upcoming' &&
+      (!Number.isInteger(config.calendarUpcomingMinutes) || config.calendarUpcomingMinutes! < 1 || config.calendarUpcomingMinutes! > 10080)
+    ) return 'Upcoming-event window must be between 1 minute and 7 days'
+    if (
+      config.triggerThrottleSeconds !== undefined &&
+      (!Number.isInteger(config.triggerThrottleSeconds) || config.triggerThrottleSeconds < 0 || config.triggerThrottleSeconds > 86400)
+    ) return 'Trigger throttle must be between 0 seconds and 24 hours'
+  }
   if (node.type === 'Condition') {
     if (!config.conditions?.length) return 'Configure at least one condition'
     if (
@@ -408,8 +457,8 @@ export const compileWorkflowGraph = (
   }
 
   const roots = nodes.filter((node) => !incoming.has(node.id))
-  if (roots.length !== 1 || roots[0].type !== 'Google Drive') {
-    return { valid: false as const, message: 'Start with one connected Google Drive trigger' }
+  if (roots.length !== 1 || !['Google Drive', 'Trigger'].includes(roots[0].type)) {
+    return { valid: false as const, message: 'Start with one configured trigger' }
   }
   if (nodes.some((node) => node.id !== roots[0].id && !incoming.has(node.id))) {
     return { valid: false as const, message: 'Connect every workflow node' }

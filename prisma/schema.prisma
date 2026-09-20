@@ -42,11 +42,12 @@ model LocalGoogleCredential {
   accountEmail  String?
   accountName   String?
 
-  folderId     String?
-  pageToken    String?
-  channelId    String  @unique @default(uuid())
-  webhookToken String?
-  subscribed   Boolean @default(false)
+  folderId          String?
+  pageToken         String?
+  channelId         String    @unique @default(uuid())
+  webhookToken      String?
+  subscribed        Boolean   @default(false)
+  channelExpiration DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,7 +111,7 @@ model Connections {
 }
 
 model Workflows {
-  id                String        @id @default(uuid())
+  id                String                @id @default(uuid())
   nodes             String?
   edges             String?
   name              String
@@ -123,11 +124,32 @@ model Workflows {
   notionDbId        String?
   flowPath          String?
   cronPath          String?
-  publish           Boolean?      @default(false)
+  publish           Boolean?              @default(false)
   description       String
-  User              User          @relation(fields: [userId], references: [clerkId])
+  User              User                  @relation(fields: [userId], references: [clerkId])
   userId            String
   runs              WorkflowRun[]
+  triggerState      WorkflowTriggerState?
+}
+
+model WorkflowTriggerState {
+  id           String    @id @default(uuid())
+  workflowId   String    @unique
+  triggerKind  String
+  cursor       String?
+  checkpoint   Json?
+  nextRunAt    DateTime?
+  lastRunAt    DateTime?
+  leaseUntil   DateTime?
+  jobId        Int?
+  jobTokenHash String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workflow Workflows @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([triggerKind, nextRunAt])
+  @@index([leaseUntil])
 }
 
 enum WorkflowRunStatus {

@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { validateLinearWorkflowGraph } from '@/lib/workflow-graph'
+import { getTriggerConfig, getTriggerKind } from '@/lib/workflow-triggers'
 
 export { validateLinearWorkflowGraph } from '@/lib/workflow-graph'
 
@@ -16,6 +17,8 @@ export const validateWorkflowForPublish = async (
 
   const graph = validateLinearWorkflowGraph(workflow.nodes, workflow.edges)
   if (!graph.valid) return graph
+  const triggerKind = getTriggerKind(graph.plan)
+  const triggerConfig = getTriggerConfig(graph.plan)
 
   const [googleUser, discord, slack, notion] = await Promise.all([
     db.user.findUnique({
@@ -46,10 +49,10 @@ export const validateWorkflowForPublish = async (
       : null,
   ])
 
-  if (
+  if (triggerKind === 'drive' && (
     !googleUser?.googleResourceId ||
     !googleUser.LocalGoogleCredential?.subscribed
-  ) {
+  )) {
     return {
       valid: false as const,
       message: 'Create the Google Drive listener before publishing',
@@ -57,6 +60,12 @@ export const validateWorkflowForPublish = async (
   }
 
   const requiredGoogleScopes = [
+    ...(triggerKind === 'gmail'
+      ? ['https://www.googleapis.com/auth/gmail.readonly']
+      : []),
+    ...(triggerKind === 'calendar'
+      ? ['https://www.googleapis.com/auth/calendar']
+      : []),
     ...(graph.steps.includes('Email')
       ? ['https://www.googleapis.com/auth/gmail.compose']
       : []),
@@ -69,7 +78,7 @@ export const validateWorkflowForPublish = async (
   ]
   if (
     requiredGoogleScopes.some(
-      (scope) => !googleUser.LocalGoogleCredential?.grantedScopes.includes(scope)
+      (scope) => !googleUser?.LocalGoogleCredential?.grantedScopes.includes(scope)
     )
   ) {
     return {
@@ -82,6 +91,28 @@ export const validateWorkflowForPublish = async (
     return {
       valid: false as const,
       message: 'Configure the Gemini API key before publishing AI actions',
+    }
+  }
+
+  if (
+    triggerKind === 'webhook' &&
+    triggerConfig.webhookRequireSignature &&
+    !process.env.INBOUND_WEBHOOK_SECRET
+  ) {
+    return {
+      valid: false as const,
+      message: 'Configure the inbound webhook signature secret before publishing',
+    }
+  }
+
+  if (
+    process.env.VERCEL_ENV === 'production' &&
+    ['schedule', 'gmail', 'calendar', 'drive'].includes(triggerKind) &&
+    !process.env.CRON_JOB_KEY
+  ) {
+    return {
+      valid: false as const,
+      message: 'Configure the trigger scheduler before publishing this workflow',
     }
   }
 

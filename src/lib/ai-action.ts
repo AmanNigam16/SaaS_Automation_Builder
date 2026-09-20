@@ -13,6 +13,7 @@ const modeInstruction: Record<NonNullable<WorkflowNodeConfig['aiMode']>, string>
   summarize: 'Summarize the supplied content clearly and concisely.',
   classify: 'Classify the supplied content according to the requested categories.',
   extract: 'Extract only the requested information from the supplied content.',
+  route: 'Choose the best route from the options supplied by the user. Return only that route unless an explanation is requested.',
 }
 
 export const executeAiAction = async (

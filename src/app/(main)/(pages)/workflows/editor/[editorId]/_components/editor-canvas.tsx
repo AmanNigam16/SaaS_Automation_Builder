@@ -113,7 +113,9 @@ const EditorCanvas = (props: Props) => {
           completed: false,
           current: false,
           metadata:
-            type === 'Condition'
+            type === 'Trigger'
+              ? { triggerKind: 'manual' }
+              : type === 'Condition'
               ? { conditionMode: 'branch', combinator: 'and', conditions: [{ field: '', operator: 'equals', value: '' }] }
               : type === 'Formatter'
                 ? { formatterOperation: 'trim', input: '' }

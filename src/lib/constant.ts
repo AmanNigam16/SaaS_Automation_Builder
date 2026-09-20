@@ -133,7 +133,7 @@ export const EditorCanvasDefaultCardTypes = {
     type: 'Action',
   },
   Trigger: {
-    description: 'An event that starts the workflow.',
+    description: 'Start manually, on a schedule, from Gmail, Calendar, or a webhook.',
     type: 'Trigger',
   },
   Action: {

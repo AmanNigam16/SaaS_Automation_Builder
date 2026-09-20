@@ -4,6 +4,8 @@ import { Option } from '@/components/ui/multiple-selector'
 import { db } from '@/lib/db'
 import { validateWorkflowForPublish } from '@/lib/workflow-validation'
 import { auth, currentUser } from '@clerk/nextjs'
+import { headers } from 'next/headers'
+import { registerTriggerLifecycle, unregisterTriggerLifecycle } from '@/lib/workflow-triggers'
 
 /* ----------------------------------
    Helper: ensure DB user exists
@@ -64,6 +66,24 @@ export const onFlowPublish = async (workflowId: string, state: boolean) => {
   })
 
   if (!published.count) return 'Workflow not found'
+  if (!state) {
+    await unregisterTriggerLifecycle(workflowId)
+    return 'Workflow unpublished'
+  }
+  try {
+    const requestHeaders = headers()
+    const host = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host')
+    const protocol = requestHeaders.get('x-forwarded-proto') ?? 'https'
+    await registerTriggerLifecycle({
+      workflowId,
+      plan: validation!.plan,
+      baseUrl: host ? `${protocol}://${host}` : undefined,
+    })
+  } catch {
+    await db.workflows.updateMany({ where: { id: workflowId, userId }, data: { publish: false } })
+    await unregisterTriggerLifecycle(workflowId).catch(() => undefined)
+    return 'Could not activate the trigger. The workflow remains unpublished.'
+  }
   return state ? 'Workflow published' : 'Workflow unpublished'
 }
 

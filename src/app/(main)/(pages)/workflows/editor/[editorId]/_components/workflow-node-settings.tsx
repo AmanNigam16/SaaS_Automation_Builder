@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import {
 } from '@/lib/workflow-semantics'
 
 const CONFIGURABLE_TYPES = new Set([
+  'Trigger',
   'Condition',
   'Formatter',
   'Wait',
@@ -91,6 +93,8 @@ const FieldPicker = ({
 const WorkflowNodeSettings = () => {
   const { state, dispatch } = useEditor()
   const { googleFile, setGoogleFile } = useFuzzieStore()
+  const pathname = usePathname()
+  const workflowId = pathname.split('/').pop() ?? ''
   const selected = state.editor.selectedNode
   const config = selected.data.metadata ?? {}
 
@@ -198,6 +202,49 @@ const WorkflowNodeSettings = () => {
 
   return (
     <div className="space-y-5 px-2 pb-4">
+      {selected.type === 'Trigger' && (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label>Trigger</Label>
+            <select className={selectClassName} value={config.triggerKind ?? 'manual'} onChange={(event) => update({ triggerKind: event.target.value as WorkflowNodeConfig['triggerKind'] })}>
+              <option value="manual">Manual only</option>
+              <option value="schedule">Schedule</option>
+              <option value="gmail">New Gmail message</option>
+              <option value="calendar">Google Calendar event</option>
+              <option value="webhook">Incoming webhook</option>
+            </select>
+          </div>
+          {config.triggerKind === 'schedule' && <>
+            <select className={selectClassName} value={config.scheduleFrequency ?? 'day'} onChange={(event) => update({ scheduleFrequency: event.target.value as WorkflowNodeConfig['scheduleFrequency'] })}>
+              <option value="minute">Every minute</option><option value="hour">Hourly</option><option value="day">Daily</option><option value="week">Weekly</option>
+            </select>
+            {config.scheduleFrequency !== 'minute' && <Input type="number" min={0} max={59} value={config.scheduleMinute ?? 0} placeholder="Minute (0-59)" onChange={(event) => update({ scheduleMinute: Number(event.target.value) })} />}
+            {['day', 'week'].includes(config.scheduleFrequency ?? 'day') && <Input type="number" min={0} max={23} value={config.scheduleHour ?? 9} placeholder="Hour (0-23)" onChange={(event) => update({ scheduleHour: Number(event.target.value) })} />}
+            {config.scheduleFrequency === 'week' && <select className={selectClassName} value={config.scheduleWeekday ?? 1} onChange={(event) => update({ scheduleWeekday: Number(event.target.value) })}><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option><option value={6}>Saturday</option></select>}
+            <Input value={config.scheduleTimeZone ?? 'UTC'} placeholder="Timezone, for example Asia/Kolkata" onChange={(event) => update({ scheduleTimeZone: event.target.value })} />
+          </>}
+          {config.triggerKind === 'gmail' && <>
+            <p className="text-sm text-muted-foreground">All filters are optional and are combined.</p>
+            <Input value={config.gmailFrom ?? ''} placeholder="Sender contains" onChange={(event) => update({ gmailFrom: event.target.value })} />
+            <Input value={config.gmailTo ?? ''} placeholder="Recipient contains" onChange={(event) => update({ gmailTo: event.target.value })} />
+            <Input value={config.gmailSubject ?? ''} placeholder="Subject contains" onChange={(event) => update({ gmailSubject: event.target.value })} />
+            <Input value={config.gmailLabel ?? ''} placeholder="Label ID (optional)" onChange={(event) => update({ gmailLabel: event.target.value })} />
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.gmailHasAttachment ?? false} onChange={(event) => update({ gmailHasAttachment: event.target.checked })} />Has an attachment</label>
+          </>}
+          {config.triggerKind === 'calendar' && <>
+            <Input value={config.calendarTriggerId ?? 'primary'} placeholder="Calendar ID" onChange={(event) => update({ calendarTriggerId: event.target.value })} />
+            <select className={selectClassName} value={config.calendarTriggerMode ?? 'new'} onChange={(event) => update({ calendarTriggerMode: event.target.value as WorkflowNodeConfig['calendarTriggerMode'] })}><option value="new">New events</option><option value="upcoming">Upcoming events</option></select>
+            {config.calendarTriggerMode === 'upcoming' && <Input type="number" min={1} max={10080} value={config.calendarUpcomingMinutes ?? 60} placeholder="Upcoming window in minutes" onChange={(event) => update({ calendarUpcomingMinutes: Number(event.target.value) })} />}
+          </>}
+          {config.triggerKind === 'webhook' && <>
+            <p className="text-sm text-muted-foreground">A unique HTTPS URL becomes active after publishing. JSON payloads up to 256 KB are accepted.</p>
+            <Input readOnly value={`/api/triggers/webhook/${workflowId}`} aria-label="Webhook path" />
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.webhookRequireSignature ?? false} onChange={(event) => update({ webhookRequireSignature: event.target.checked })} />Require an HMAC signature</label>
+          </>}
+          {config.triggerKind !== 'manual' && <Input type="number" min={0} max={86400} value={config.triggerThrottleSeconds ?? 0} placeholder="Minimum seconds between trigger checks" onChange={(event) => update({ triggerThrottleSeconds: Number(event.target.value) })} />}
+        </div>
+      )}
+
       {(selected.type === 'Discord' || selected.type === 'Slack' || selected.type === 'Notion') && (
         <div className="space-y-2">
           <Label>Dynamic template</Label>
@@ -361,7 +408,7 @@ const WorkflowNodeSettings = () => {
 
       {selected.type === 'AI' && (
         <div className="space-y-3">
-          <div className="space-y-2"><Label>Mode</Label><select className={selectClassName} value={config.aiMode ?? 'generate'} onChange={(event) => update({ aiMode: event.target.value as WorkflowNodeConfig['aiMode'] })}><option value="generate">Generate</option><option value="summarize">Summarize</option><option value="classify">Classify</option><option value="extract">Extract</option></select></div>
+          <div className="space-y-2"><Label>Mode</Label><select className={selectClassName} value={config.aiMode ?? 'generate'} onChange={(event) => update({ aiMode: event.target.value as WorkflowNodeConfig['aiMode'] })}><option value="generate">Generate</option><option value="summarize">Summarize</option><option value="classify">Classify</option><option value="extract">Extract</option><option value="route">Route</option></select></div>
           <Textarea value={config.systemInstruction ?? ''} placeholder="System instruction (optional)" onChange={(event) => update({ systemInstruction: event.target.value })} />
           <Textarea value={config.prompt ?? ''} placeholder="Prompt or {{field}}" onChange={(event) => update({ prompt: event.target.value })} />
           <FieldPicker fields={availableFields} onPick={(field) => update({ prompt: `${config.prompt ?? ''}${field}` })} />

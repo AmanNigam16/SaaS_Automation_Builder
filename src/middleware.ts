@@ -16,6 +16,8 @@ export default authMiddleware({
     '/api/cron/wait',
     '/api/cron/workflow-retry',
     '/api/cron/workflow-resume',
+    '/api/cron/triggers',
+    '/api/triggers/webhook/(.*)',
   ],
 })
 

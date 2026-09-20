@@ -160,3 +160,36 @@ test('accepts configured Google Drive actions without confusing them with the tr
   assert.equal(result.valid, true)
   if (result.valid) assert.deepEqual(result.steps, ['Google Drive Action'])
 })
+
+test('accepts configured schedule, Gmail, Calendar, and webhook triggers', () => {
+  for (const metadata of [
+    { triggerKind: 'schedule', scheduleFrequency: 'day', scheduleHour: 9, scheduleMinute: 30, scheduleTimeZone: 'Asia/Kolkata' },
+    { triggerKind: 'gmail', gmailSubject: 'important' },
+    { triggerKind: 'calendar', calendarTriggerMode: 'upcoming', calendarUpcomingMinutes: 60 },
+    { triggerKind: 'webhook', webhookRequireSignature: true },
+  ]) {
+    const result = validateLinearWorkflowGraph(
+      JSON.stringify([
+        { id: 'trigger', type: 'Trigger', data: { metadata } },
+        { id: 'formatter', type: 'Formatter', data: { metadata: { formatterOperation: 'trim', input: '{{trigger.payload}}' } } },
+      ]),
+      JSON.stringify([{ source: 'trigger', target: 'formatter' }])
+    )
+    assert.equal(result.valid, true)
+  }
+})
+
+test('rejects invalid schedule and upcoming-event trigger settings', () => {
+  const action = { id: 'formatter', type: 'Formatter', data: { metadata: { formatterOperation: 'trim', input: 'value' } } }
+  const edge = JSON.stringify([{ source: 'trigger', target: 'formatter' }])
+  const schedule = validateLinearWorkflowGraph(
+    JSON.stringify([{ id: 'trigger', type: 'Trigger', data: { metadata: { triggerKind: 'schedule', scheduleFrequency: 'day', scheduleHour: 25 } } }, action]),
+    edge
+  )
+  assert.equal(schedule.valid, false)
+  const calendar = validateLinearWorkflowGraph(
+    JSON.stringify([{ id: 'trigger', type: 'Trigger', data: { metadata: { triggerKind: 'calendar', calendarTriggerMode: 'upcoming', calendarUpcomingMinutes: 0 } } }, action]),
+    edge
+  )
+  assert.equal(calendar.valid, false)
+})
