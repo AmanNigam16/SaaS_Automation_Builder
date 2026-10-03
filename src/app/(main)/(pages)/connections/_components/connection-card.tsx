@@ -10,6 +10,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import GoogleDriveConnectionActions from './google-drive-connection-actions'
+import ProviderConnectionActions from './provider-connection-actions'
+import type { ManagedProvider } from '../_actions/provider-connection'
 
 type Props = {
   type: ConnectionTypes
@@ -19,6 +21,7 @@ type Props = {
   callback?: () => void
   connected: {} & any
   connectionLabel?: string
+  connectionDetail?: string
   requiresReconnect?: boolean
 }
 
@@ -29,6 +32,7 @@ const ConnectionCard = ({
   title,
   connected,
   connectionLabel,
+  connectionDetail,
   requiresReconnect,
 }: Props) => {
   const connectHref =
@@ -60,18 +64,26 @@ const ConnectionCard = ({
         </div>
       </CardHeader>
       <div className="flex flex-col items-center gap-2 p-4">
-        {connected[type] ? (
+        {connected[type] || requiresReconnect ? (
           <>
             <div className="border-bg-primary rounded-lg border-2 px-3 py-2 font-bold text-white">
-              Connected
+              {requiresReconnect ? 'Reconnect required' : 'Connected'}
             </div>
             {connectionLabel && (
               <p className="max-w-48 truncate text-xs text-muted-foreground">
                 {connectionLabel}
               </p>
             )}
+            {connectionDetail && (
+              <p className="max-w-48 truncate text-xs text-muted-foreground">
+                {connectionDetail}
+              </p>
+            )}
             {title === 'Google Drive' && (
               <GoogleDriveConnectionActions connectHref={connectHref} />
+            )}
+            {title !== 'Google Drive' && (
+              <ProviderConnectionActions provider={title as ManagedProvider} />
             )}
           </>
         ) : (

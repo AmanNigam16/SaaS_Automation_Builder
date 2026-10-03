@@ -8,6 +8,7 @@ import {
   parseFlowSteps,
 } from '@/lib/workflow-runner'
 import { matchesDriveTrigger } from '@/lib/workflow-semantics'
+import { getPublishedFlowPath } from '@/lib/workflow-snapshots'
 
 const MAX_CONCURRENT_WORKFLOWS = 4
 
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
   })
   const workflowExecutions = workflows.map((flow) => ({
     flow,
-    steps: parseFlowSteps(flow.flowPath),
+    steps: parseFlowSteps(getPublishedFlowPath(flow)),
   }))
 
   const counts = { changes: 0, started: 0, succeeded: 0, failed: 0, duplicates: 0 }

@@ -31,17 +31,13 @@ export const validateWorkflowForPublish = async (
     graph.steps.includes('Discord')
       ? db.discordWebhook.findFirst({ where: { userId }, select: { id: true } })
       : null,
-    graph.steps.includes('Slack') && workflow.slackAccessToken
-      ? db.slack.findFirst({
-          where: { userId, slackAccessToken: workflow.slackAccessToken },
-          select: { id: true },
-        })
+    graph.steps.includes('Slack')
+      ? db.slack.findFirst({ where: { userId }, select: { id: true } })
       : null,
-    graph.steps.includes('Notion') && workflow.notionAccessToken
+    graph.steps.includes('Notion')
       ? db.notion.findFirst({
           where: {
             userId,
-            accessToken: workflow.notionAccessToken,
             databaseId: workflow.notionDbId ?? undefined,
           },
           select: { id: true },

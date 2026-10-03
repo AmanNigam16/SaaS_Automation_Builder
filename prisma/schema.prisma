@@ -30,6 +30,7 @@ model User {
   Notion                Notion[]
   Slack                 Slack[]
   connections           Connections[]
+  connectionAuditEvents ConnectionAuditEvent[]
   workflows             Workflows[]
 }
 
@@ -98,16 +99,37 @@ model Notion {
 }
 
 model Connections {
-  id               String          @id @default(uuid())
-  type             String          @unique
-  DiscordWebhook   DiscordWebhook? @relation(fields: [discordWebhookId], references: [id])
-  discordWebhookId String?
-  Notion           Notion?         @relation(fields: [notionId], references: [id])
-  notionId         String?
-  User             User?           @relation(fields: [userId], references: [clerkId])
-  userId           String?
-  Slack            Slack?          @relation(fields: [slackId], references: [id])
-  slackId          String?
+  id                 String          @id @default(uuid())
+  type               String
+  status             String          @default("CONNECTED")
+  grantedPermissions String[]        @default([])
+  lastCheckedAt      DateTime?
+  lastErrorCode      String?
+  DiscordWebhook     DiscordWebhook? @relation(fields: [discordWebhookId], references: [id])
+  discordWebhookId   String?
+  Notion             Notion?         @relation(fields: [notionId], references: [id])
+  notionId           String?
+  User               User?           @relation(fields: [userId], references: [clerkId])
+  userId             String?
+  Slack              Slack?          @relation(fields: [slackId], references: [id])
+  slackId            String?
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+model ConnectionAuditEvent {
+  id           String   @id @default(uuid())
+  userId       String
+  provider     String
+  action       String
+  accountLabel String?
+  outcome      String
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [clerkId], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Workflows {
@@ -123,6 +145,9 @@ model Workflows {
   notionAccessToken String?
   notionDbId        String?
   flowPath          String?
+  publishedFlowPath String?
+  draftVersion      Int                   @default(1)
+  publishedVersion  Int?
   cronPath          String?
   publish           Boolean?              @default(false)
   description       String
@@ -169,22 +194,24 @@ enum WorkflowStepStatus {
 }
 
 model WorkflowRun {
-  id             String            @id @default(uuid())
-  workflowId     String
-  triggerType    String
-  triggerEventId String
-  status         WorkflowRunStatus @default(RUNNING)
-  input          Json?
-  output         Json?
-  error          String?
-  retryAt        DateTime?
-  retryCount     Int               @default(0)
-  retryJobId     Int?
-  retryTokenHash String?
-  startedAt      DateTime          @default(now())
-  finishedAt     DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id              String            @id @default(uuid())
+  workflowId      String
+  triggerType     String
+  triggerEventId  String
+  status          WorkflowRunStatus @default(RUNNING)
+  input           Json?
+  output          Json?
+  error           String?
+  retryAt         DateTime?
+  retryCount      Int               @default(0)
+  retryJobId      Int?
+  retryTokenHash  String?
+  workflowVersion Int?
+  executionPlan   Json?
+  startedAt       DateTime          @default(now())
+  finishedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   workflow Workflows         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   steps    WorkflowStepRun[]

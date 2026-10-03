@@ -27,6 +27,7 @@ export const onCreateNodesEdges = async (
       nodes,
       edges,
       flowPath: JSON.stringify(graph.valid ? graph.plan : []),
+      draftVersion: { increment: 1 },
     },
   })
 
@@ -54,11 +55,17 @@ export const onFlowPublish = async (workflowId: string, state: boolean) => {
     data: {
       publish: state,
       ...(validation?.valid
-        ? { flowPath: JSON.stringify(validation.plan) }
+        ? {
+            flowPath: JSON.stringify(validation.plan),
+            publishedFlowPath: JSON.stringify(validation.plan),
+          }
         : {}),
     },
   })
 
   if (!published.count) return 'Workflow not found'
+  if (state) {
+    await db.$executeRaw`UPDATE "Workflows" SET "publishedVersion" = "draftVersion" WHERE "id" = ${workflowId} AND "userId" = ${userId}`
+  }
   return state ? 'Workflow published' : 'Workflow unpublished'
 }

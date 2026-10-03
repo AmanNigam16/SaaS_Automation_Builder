@@ -18,7 +18,6 @@ export type Connection = {
   description: string
   image: string
   connectionKey: keyof ConnectionProviderProps
-  accessTokenKey?: string
   alwaysTrue?: boolean
   slackSpecial?: boolean
 }

@@ -1,81 +1,27 @@
 'use server'
 
 import type { Option } from '@/components/ui/multiple-selector'
+import { auth, currentUser } from '@clerk/nextjs'
+import { db } from '@/lib/db'
+import { listSlackChannelsForUser, sendSlackMessageForUser } from '@/lib/provider-actions'
 
 export const getSlackConnection = async () => {
-  const { currentUser } = await import('@clerk/nextjs')
-  const { db } = await import('@/lib/db')
-
   const user = await currentUser()
   if (!user) return null
-
   return db.slack.findFirst({
     where: { userId: user.id },
+    select: { appId: true, authedUserId: true, botUserId: true, teamId: true, teamName: true },
   })
 }
 
-export async function listBotChannels(
-  slackAccessToken: string
-): Promise<Option[]> {
-  const axios = (await import('axios')).default
-
-  const url = `https://slack.com/api/conversations.list?${new URLSearchParams({
-    types: 'public_channel,private_channel',
-    limit: '200',
-  })}`
-
-  const { data } = await axios.get(url, {
-    headers: { Authorization: `Bearer ${slackAccessToken}` },
-    timeout: 10_000,
-  })
-
-  if (!data.ok) throw new Error('Slack could not list channels. Check the app permissions and reconnect.')
-  if (!data?.channels?.length) return []
-
-  return data.channels
-    .filter((ch: any) => ch.is_member)
-    .map((ch: any) => ({
-      label: ch.name,
-      value: ch.id,
-    }))
+export const listBotChannels = async (): Promise<Option[]> => {
+  const { userId } = auth()
+  if (!userId) throw new Error('Unauthorized')
+  return listSlackChannelsForUser(userId)
 }
 
-const postMessageInSlackChannel = async (
-  slackAccessToken: string,
-  slackChannel: string,
-  content: string
-): Promise<void> => {
-  const axios = (await import('axios')).default
-
-  const { data } = await axios.post(
-    'https://slack.com/api/chat.postMessage',
-    { channel: slackChannel, text: content },
-    {
-      headers: {
-        Authorization: `Bearer ${slackAccessToken}`,
-        'Content-Type': 'application/json;charset=utf-8',
-      },
-      timeout: 10_000,
-    }
-  )
-
-  if (!data.ok) throw new Error('Slack rejected the message')
-}
-
-export const postMessageToSlack = async (
-  slackAccessToken: string,
-  selectedSlackChannels: Option[],
-  content: string
-): Promise<{ message: string }> => {
-  if (!content) return { message: 'Content is empty' }
-  if (!selectedSlackChannels?.length)
-    return { message: 'Channel not selected' }
-
-  await Promise.all(
-    selectedSlackChannels.map((channel) =>
-      postMessageInSlackChannel(slackAccessToken, channel.value, content)
-    )
-  )
-
-  return { message: 'Success' }
+export const testSlackMessage = async (channels: Option[], content: string) => {
+  const { userId } = auth()
+  if (!userId) return { message: 'Unauthorized' }
+  return sendSlackMessageForUser(userId, channels, content)
 }

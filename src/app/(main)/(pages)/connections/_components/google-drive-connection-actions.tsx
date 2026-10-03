@@ -3,9 +3,13 @@
 import axios from 'axios'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTransition } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { disconnectGoogleDrive } from '../_actions/google-connection'
+import {
+  disconnectGoogleDrive,
+  testGoogleDriveConnection,
+} from '../_actions/google-connection'
 
 type Props = {
   connectHref: string
@@ -13,6 +17,23 @@ type Props = {
 
 const GoogleDriveConnectionActions = ({ connectHref }: Props) => {
   const router = useRouter()
+  const [pending, startTransition] = useTransition()
+
+  const testConnection = () =>
+    startTransition(async () => {
+      const result = await testGoogleDriveConnection()
+      result.ok ? toast.success(result.message) : toast.error(result.message)
+      router.refresh()
+    })
+
+  const disconnect = () => {
+    if (!window.confirm('Disconnect Google Drive? Existing workflows using it will stop until you reconnect.')) return
+    startTransition(async () => {
+      const result = await disconnectGoogleDrive()
+      result?.ok ? toast.success(result.message) : toast.error(result?.message)
+      router.refresh()
+    })
+  }
 
   const refreshGoogleDriveListener = async () => {
     try {
@@ -33,6 +54,16 @@ const GoogleDriveConnectionActions = ({ connectHref }: Props) => {
         size="sm"
         type="button"
         variant="outline"
+        disabled={pending}
+        onClick={testConnection}
+      >
+        Test
+      </Button>
+      <Button
+        size="sm"
+        type="button"
+        variant="outline"
+        disabled={pending}
         onClick={refreshGoogleDriveListener}
       >
         Refresh listener
@@ -40,11 +71,9 @@ const GoogleDriveConnectionActions = ({ connectHref }: Props) => {
       <Button asChild size="sm" variant="outline">
         <Link href={connectHref}>Reconnect</Link>
       </Button>
-      <form action={disconnectGoogleDrive}>
-        <Button size="sm" type="submit" variant="ghost">
-          Disconnect
-        </Button>
-      </form>
+      <Button size="sm" type="button" variant="ghost" disabled={pending} onClick={disconnect}>
+        Disconnect
+      </Button>
     </div>
   )
 }

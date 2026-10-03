@@ -3,11 +3,11 @@ import { Option } from './content-based-on-title'
 import { ConnectionProviderProps } from '@/providers/connections-provider'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { postContentToWebHook } from '@/app/(main)/(pages)/connections/_actions/discord-connection'
+import { testDiscordMessage } from '@/app/(main)/(pages)/connections/_actions/discord-connection'
 import { onCreateNodeTemplate } from '../../../_actions/workflow-connections'
 import { toast } from 'sonner'
-import { onCreateNewPageInDatabase } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
-import { postMessageToSlack } from '@/app/(main)/(pages)/connections/_actions/slack-connection'
+import { testNotionPage } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
+import { testSlackMessage } from '@/app/(main)/(pages)/connections/_actions/slack-connection'
 
 type Props = {
   currentService: string
@@ -25,10 +25,7 @@ const ActionButton = ({
   const pathname = usePathname()
 
   const onSendDiscordMessage = useCallback(async () => {
-    const response = await postContentToWebHook(
-      nodeConnection.discordNode.content,
-      nodeConnection.discordNode.webhookURL
-    )
+    const response = await testDiscordMessage(nodeConnection.discordNode.content)
 
     if (response.message == 'success') {
       nodeConnection.setDiscordNode((prev: any) => ({
@@ -39,9 +36,8 @@ const ActionButton = ({
   }, [nodeConnection.discordNode])
 
   const onStoreNotionContent = useCallback(async () => {
-    const response = await onCreateNewPageInDatabase(
+    const response = await testNotionPage(
       nodeConnection.notionNode.databaseId,
-      nodeConnection.notionNode.accessToken,
       nodeConnection.notionNode.content
     )
     if (response) {
@@ -53,8 +49,7 @@ const ActionButton = ({
   }, [nodeConnection.notionNode])
 
   const onStoreSlackContent = useCallback(async () => {
-    const response = await postMessageToSlack(
-      nodeConnection.slackNode.slackAccessToken,
+    const response = await testSlackMessage(
       channels!,
       nodeConnection.slackNode.content
     )
@@ -87,8 +82,7 @@ const ActionButton = ({
         nodeConnection.slackNode.content,
         currentService,
         pathname.split('/').pop()!,
-        channels,
-        nodeConnection.slackNode.slackAccessToken
+        channels
       )
 
       if (response) {
@@ -102,7 +96,7 @@ const ActionButton = ({
         currentService,
         pathname.split('/').pop()!,
         [],
-        nodeConnection.notionNode.accessToken,
+        undefined,
         nodeConnection.notionNode.databaseId
       )
 

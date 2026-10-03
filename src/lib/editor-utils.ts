@@ -93,7 +93,7 @@ export const onConnections = async (
     const connection = await getDiscordConnectionUrl()
     if (connection) {
       nodeConnection.setDiscordNode({
-        webhookURL: connection.url,
+        connected: true,
         content: '',
         webhookName: connection.name,
         guildName: connection.guildName,
@@ -104,7 +104,7 @@ export const onConnections = async (
     const connection = await getNotionConnection()
     if (connection) {
       nodeConnection.setNotionNode({
-        accessToken: connection.accessToken,
+        connected: true,
         databaseId: connection.databaseId,
         workspaceName: connection.workspaceName,
         content: {
@@ -121,11 +121,10 @@ export const onConnections = async (
       nodeConnection.setSlackNode({
         appId: connection.appId,
         authedUserId: connection.authedUserId,
-        slackAccessToken: connection.slackAccessToken,
+        connected: true,
         botUserId: connection.botUserId,
         teamId: connection.teamId,
         teamName: connection.teamName,
-        userId: connection.userId,
         content: '',
       })
     }
@@ -133,10 +132,9 @@ export const onConnections = async (
 }
 
 export const fetchBotSlackChannels = async (
-  token: string,
   setSlackChannels: (slackChannels: Option[]) => void
 ) => {
-  await listBotChannels(token)?.then((channels) => setSlackChannels(channels))
+  await listBotChannels()?.then((channels) => setSlackChannels(channels))
 }
 
 export const onNotionContent = (

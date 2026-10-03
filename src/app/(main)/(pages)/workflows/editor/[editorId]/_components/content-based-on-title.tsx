@@ -54,17 +54,7 @@ const ContentBasedOnTitle = ({
   const isConnected =
     title === 'Google Drive'
       ? !nodeConnection.isLoading
-      : !!nodeConnectionType[
-          `${
-            title === 'Slack'
-              ? 'slackAccessToken'
-              : title === 'Discord'
-              ? 'webhookURL'
-              : title === 'Notion'
-              ? 'accessToken'
-              : ''
-          }`
-        ]
+      : !!nodeConnectionType.connected
 
   if (!isConnected) return <p>Not connected</p>
 

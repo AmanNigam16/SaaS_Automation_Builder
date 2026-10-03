@@ -58,7 +58,6 @@ const RenderConnectionAccordion = ({
     image,
     description,
     connectionKey,
-    accessTokenKey,
     alwaysTrue,
     slackSpecial,
   } = connection
@@ -74,9 +73,7 @@ const RenderConnectionAccordion = ({
 
   const isConnected =
     alwaysTrue ||
-    (nodeConnection[connectionKey] &&
-      accessTokenKey &&
-      connectionData[accessTokenKey!])
+    (nodeConnection[connectionKey] && connectionData.connected)
 
   return (
     <AccordionContent key={title}>

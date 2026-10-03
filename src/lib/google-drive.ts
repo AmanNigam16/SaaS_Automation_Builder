@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import { decryptSecret, encryptSecret } from '@/lib/credential-encryption'
 
 const DEFAULT_GOOGLE_SCOPES = [
   'openid',
@@ -45,7 +46,11 @@ const getGoogleDriveCredential = async (clerkUserId: string) => {
 
   if (!dbUser?.LocalGoogleCredential) return null
 
-  return dbUser.LocalGoogleCredential
+  return {
+    ...dbUser.LocalGoogleCredential,
+    accessToken: decryptSecret(dbUser.LocalGoogleCredential.accessToken)!,
+    refreshToken: decryptSecret(dbUser.LocalGoogleCredential.refreshToken),
+  }
 }
 
 export const getGoogleDriveConnection = async (
@@ -55,6 +60,7 @@ export const getGoogleDriveConnection = async (
   requiresReconnect: boolean
   accountEmail: string | null
   accountName: string | null
+  grantedScopes: string[]
 }> => {
   const credential = await getGoogleDriveCredential(clerkUserId)
 
@@ -64,6 +70,7 @@ export const getGoogleDriveConnection = async (
       requiresReconnect: false,
       accountEmail: null,
       accountName: null,
+      grantedScopes: [],
     }
   }
 
@@ -78,6 +85,7 @@ export const getGoogleDriveConnection = async (
     requiresReconnect: !accessTokenIsCurrent && !canRefresh,
     accountEmail: credential.accountEmail,
     accountName: credential.accountName,
+    grantedScopes: credential.grantedScopes,
   }
 }
 
@@ -107,9 +115,9 @@ export const getGoogleDriveClient = async (clerkUserId: string) => {
   await db.localGoogleCredential.update({
     where: { id: credential.id },
     data: {
-      accessToken: credentials.access_token,
+      accessToken: encryptSecret(credentials.access_token),
       ...(credentials.refresh_token
-        ? { refreshToken: credentials.refresh_token }
+        ? { refreshToken: encryptSecret(credentials.refresh_token) }
         : {}),
       expiryDate: credentials.expiry_date
         ? new Date(credentials.expiry_date)
@@ -181,8 +189,8 @@ export const upsertGoogleDriveConnection = async ({
   await db.localGoogleCredential.upsert({
     where: { userId: dbUser.id },
     update: {
-      accessToken,
-      ...(refreshToken ? { refreshToken } : {}),
+      accessToken: encryptSecret(accessToken),
+      ...(refreshToken ? { refreshToken: encryptSecret(refreshToken) } : {}),
       expiryDate,
       grantedScopes: grantedScopes ?? [],
       accountEmail,
@@ -190,12 +198,19 @@ export const upsertGoogleDriveConnection = async ({
     },
     create: {
       userId: dbUser.id,
-      accessToken,
-      refreshToken,
+      accessToken: encryptSecret(accessToken),
+      refreshToken: refreshToken ? encryptSecret(refreshToken) : null,
       expiryDate,
       grantedScopes: grantedScopes ?? [],
       accountEmail,
       accountName,
     },
   })
+  const { auditConnectionEvent } = await import('@/lib/provider-connections')
+  await auditConnectionEvent(
+    clerkUserId,
+    'Google Drive',
+    'CONNECTED',
+    accountEmail ?? accountName ?? null
+  )
 }

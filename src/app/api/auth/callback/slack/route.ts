@@ -52,6 +52,10 @@ export async function GET(req: NextRequest) {
       botUserId: data.bot_user_id ?? '',
       teamId: data.team.id,
       teamName: data.team.name ?? '',
+      grantedPermissions: String(data.scope ?? '')
+        .split(',')
+        .map((scope) => scope.trim())
+        .filter(Boolean),
     })
     return redirectToConnections(req, 'connected')
   } catch {

@@ -6,7 +6,7 @@ import React from 'react'
 import ConnectionCard from './_components/connection-card'
 import { currentUser } from '@clerk/nextjs'
 import { getGoogleDriveConnectionDetails } from './_actions/google-connection'
-import { getUserData } from './_actions/get-user'
+import { getManagedConnectionDetails } from './_actions/provider-connection'
 
 const Connections = async () => {
 
@@ -14,28 +14,30 @@ const Connections = async () => {
   if (!user) return null
 
   const onUserConnections = async () => {
-    const connections: any = {}
-    const [googleConnection, user_info] = await Promise.all([
+    const [googleConnection, managedConnections] = await Promise.all([
       getGoogleDriveConnectionDetails(),
-      getUserData(user.id),
+      getManagedConnectionDetails(user.id),
     ])
-
-    //get user info with all connections
-    user_info?.connections.map((connection) => {
-      connections[connection.type] = true
-      return (connections[connection.type] = true)
-    })
 
     return {
       connections: {
-        ...connections,
+        Discord:
+          managedConnections.Discord.connected &&
+          !managedConnections.Discord.requiresReconnect,
+        Notion:
+          managedConnections.Notion.connected &&
+          !managedConnections.Notion.requiresReconnect,
+        Slack:
+          managedConnections.Slack.connected &&
+          !managedConnections.Slack.requiresReconnect,
         'Google Drive': googleConnection.connected,
       },
       googleConnection,
+      managedConnections,
     }
   }
 
-  const { connections, googleConnection } = await onUserConnections()
+  const { connections, googleConnection, managedConnections } = await onUserConnections()
 
   return (
     <div className="relative flex flex-col gap-4">
@@ -59,11 +61,31 @@ const Connections = async () => {
                   ? googleConnection.accountEmail ??
                     googleConnection.accountName ??
                     undefined
-                  : undefined
+                  : managedConnections[
+                      connection.title as keyof typeof managedConnections
+                    ]?.accountLabel ?? undefined
+              }
+              connectionDetail={
+                connection.title === 'Google Drive'
+                  ? googleConnection.grantedScopes.length
+                    ? `${googleConnection.grantedScopes.length} permissions granted`
+                    : undefined
+                  : (() => {
+                      const detail = managedConnections[
+                        connection.title as keyof typeof managedConnections
+                      ]
+                      if (!detail) return undefined
+                      return detail.grantedPermissions.length
+                        ? `${detail.detail ?? 'Connected'} · ${detail.grantedPermissions.length} permissions`
+                        : detail.detail ?? undefined
+                    })()
               }
               requiresReconnect={
-                connection.title === 'Google Drive' &&
-                googleConnection.requiresReconnect
+                connection.title === 'Google Drive'
+                  ? googleConnection.requiresReconnect
+                  : managedConnections[
+                      connection.title as keyof typeof managedConnections
+                    ]?.requiresReconnect ?? false
               }
             />
           ))}

@@ -12,6 +12,7 @@ import {
   parseWorkflowExecutionState,
 } from '@/lib/workflow-runner'
 import { validateWorkflowForPublish } from '@/lib/workflow-validation'
+import { getRunFlowPath } from '@/lib/workflow-snapshots'
 
 const STALE_RUN_MS = 15 * 60 * 1000
 
@@ -91,7 +92,10 @@ export const retryWorkflowRun = async (runId: string) => {
     if (!paused.count) return { message: 'This run is already being handled' }
   }
 
-  const steps = parseFlowSteps(run.workflow.flowPath)
+  const steps = parseFlowSteps(getRunFlowPath({
+    executionPlan: run.executionPlan,
+    flowPath: run.workflow.flowPath,
+  }))
   const latestStepByIndex = new Map<number, (typeof run.steps)[number]>()
   const nextAttemptByStep = new Map<number, number>()
   const reservedStepIndexes = new Set<number>()
@@ -158,5 +162,40 @@ export const retryWorkflowRun = async (runId: string) => {
         : result.status === 'failed'
           ? 'Retry failed. See Logs for details.'
           : 'This run is already being handled',
+  }
+}
+
+export const cancelWorkflowRun = async (runId: string) => {
+  const { userId } = auth()
+  if (!userId) return { message: 'Unauthorized' }
+
+  const run = await db.workflowRun.findFirst({
+    where: { id: runId, workflow: { userId } },
+    select: { status: true, retryJobId: true },
+  })
+  if (!run) return { message: 'Workflow run not found' }
+  if (!['QUEUED', 'WAITING', 'PAUSED'].includes(run.status)) {
+    return { message: 'Only queued, waiting, or paused runs can be cancelled safely' }
+  }
+
+  if (run.retryJobId) {
+    await deleteScheduledJob(run.retryJobId).catch(() => undefined)
+  }
+
+  const cancelled = await db.workflowRun.updateMany({
+    where: { id: runId, status: { in: ['QUEUED', 'WAITING', 'PAUSED'] } },
+    data: {
+      status: 'CANCELLED',
+      retryAt: null,
+      retryJobId: null,
+      retryTokenHash: null,
+      finishedAt: new Date(),
+    },
+  })
+
+  revalidatePath('/logs')
+  revalidatePath(`/logs/${runId}`)
+  return {
+    message: cancelled.count ? 'Workflow run cancelled' : 'This run is already being handled',
   }
 }

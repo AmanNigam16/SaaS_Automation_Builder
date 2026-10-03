@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { validateWorkflowForPublish } from '@/lib/workflow-validation'
 import { auth, currentUser } from '@clerk/nextjs'
 import { headers } from 'next/headers'
+import { revalidatePath } from 'next/cache'
 import { registerTriggerLifecycle, unregisterTriggerLifecycle } from '@/lib/workflow-triggers'
 
 /* ----------------------------------
@@ -60,12 +61,18 @@ export const onFlowPublish = async (workflowId: string, state: boolean) => {
     data: {
       publish: state,
       ...(validation?.valid
-        ? { flowPath: JSON.stringify(validation.plan) }
+        ? {
+            flowPath: JSON.stringify(validation.plan),
+            publishedFlowPath: JSON.stringify(validation.plan),
+          }
         : {}),
     },
   })
 
   if (!published.count) return 'Workflow not found'
+  if (state) {
+    await db.$executeRaw`UPDATE "Workflows" SET "publishedVersion" = "draftVersion" WHERE "id" = ${workflowId} AND "userId" = ${userId}`
+  }
   if (!state) {
     await unregisterTriggerLifecycle(workflowId)
     return 'Workflow unpublished'
@@ -95,7 +102,7 @@ export const onCreateNodeTemplate = async (
   type: string,
   workflowId: string,
   channels?: Option[],
-  accessToken?: string,
+  _accessToken?: string,
   notionDbId?: string
 ) => {
   const { userId } = auth()
@@ -114,7 +121,7 @@ export const onCreateNodeTemplate = async (
       where: { id: workflowId, userId },
       data: {
         slackTemplate: content,
-        slackAccessToken: accessToken,
+        slackAccessToken: null,
         slackChannels: channels?.map((channel) => channel.value) ?? [],
       },
     })
@@ -127,7 +134,7 @@ export const onCreateNodeTemplate = async (
       where: { id: workflowId, userId },
       data: {
         notionTemplate: content,
-        notionAccessToken: accessToken,
+        notionAccessToken: null,
         notionDbId,
       },
     })
@@ -168,6 +175,36 @@ export const onCreateWorkflow = async (
   })
 
   return { message: 'workflow created' }
+}
+
+export const onDuplicateWorkflow = async (workflowId: string) => {
+  const { userId } = auth()
+  if (!userId) return { message: 'Unauthorized' }
+
+  const source = await db.workflows.findFirst({
+    where: { id: workflowId, userId },
+  })
+  if (!source) return { message: 'Workflow not found' }
+
+  await db.workflows.create({
+    data: {
+      userId,
+      name: `${source.name} Copy`,
+      description: source.description,
+      nodes: source.nodes,
+      edges: source.edges,
+      flowPath: source.flowPath,
+      discordTemplate: source.discordTemplate,
+      notionTemplate: source.notionTemplate,
+      slackTemplate: source.slackTemplate,
+      slackChannels: source.slackChannels,
+      notionDbId: source.notionDbId,
+      publish: false,
+    },
+  })
+
+  revalidatePath('/workflows')
+  return { message: 'Workflow duplicated as an unpublished draft' }
 }
 
 /* ----------------------------------

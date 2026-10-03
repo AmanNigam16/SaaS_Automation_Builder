@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { onFlowPublish } from '../_actions/workflow-connections'
 import { runWorkflowNow } from '../_actions/workflow-runs'
+import { WorkflowActions } from './workflow-actions'
 
 type Props = {
   name: string
@@ -68,6 +69,7 @@ const Workflow = ({ description, id, name, publish }: Props) => {
         </Link>
       </CardHeader>
       <div className="flex flex-col items-center gap-2 p-4">
+        <WorkflowActions workflowId={id} />
         <Label
           htmlFor="airplane-mode"
           className="text-muted-foreground"

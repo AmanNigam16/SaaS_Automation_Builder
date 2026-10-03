@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { currentUser } from '@clerk/nextjs'
+import Link from 'next/link'
 import {
   AlertTriangle,
   CircleCheck,
@@ -22,6 +23,9 @@ import {
 import { db } from '@/lib/db'
 import { cn } from '@/lib/utils'
 import { RetryRunButton } from './_components/retry-run-button'
+import { CancelRunButton } from './_components/cancel-run-button'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 const statusDetails = {
   QUEUED: {
@@ -84,12 +88,35 @@ const formatDuration = (startedAt: Date, finishedAt: Date | null) => {
   return `${(duration / 1000).toFixed(1)} s`
 }
 
-const LogsPage = async () => {
+const allowedStatuses = new Set(Object.keys(statusDetails))
+
+const LogsPage = async ({
+  searchParams,
+}: {
+  searchParams?: { query?: string; status?: string; trigger?: string }
+}) => {
   const user = await currentUser()
   if (!user) return null
 
+  const query = searchParams?.query?.trim() ?? ''
+  const trigger = searchParams?.trigger?.trim() ?? ''
+  const status = allowedStatuses.has(searchParams?.status ?? '')
+    ? searchParams?.status
+    : undefined
+
   const runs = await db.workflowRun.findMany({
-    where: { workflow: { userId: user.id } },
+    where: {
+      workflow: {
+        userId: user.id,
+        ...(query
+          ? { name: { contains: query, mode: 'insensitive' as const } }
+          : {}),
+      },
+      ...(status ? { status: status as keyof typeof statusDetails } : {}),
+      ...(trigger
+        ? { triggerType: { contains: trigger, mode: 'insensitive' as const } }
+        : {}),
+    },
     include: {
       workflow: { select: { name: true } },
       steps: { orderBy: [{ stepIndex: 'asc' }, { attempt: 'asc' }] },
@@ -111,6 +138,27 @@ const LogsPage = async () => {
             Review the latest trigger results and every action that ran.
           </p>
         </div>
+
+        <form className="grid gap-3 rounded-lg border p-4 md:grid-cols-[1fr_220px_220px_auto]">
+          <Input name="query" defaultValue={query} placeholder="Search workflow name" />
+          <Input name="trigger" defaultValue={trigger} placeholder="Filter trigger" />
+          <select
+            name="status"
+            defaultValue={status ?? ''}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">All statuses</option>
+            {Object.entries(statusDetails).map(([value, details]) => (
+              <option key={value} value={value}>{details.label}</option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <Button type="submit">Filter</Button>
+            <Button asChild type="button" variant="outline">
+              <Link href="/logs">Clear</Link>
+            </Button>
+          </div>
+        </form>
 
         {runs.length ? (
           runs.map((run) => {
@@ -140,9 +188,17 @@ const LogsPage = async () => {
                       <StatusIcon className="h-3.5 w-3.5" />
                       {details.label}
                     </Badge>
-                    {(run.status === 'QUEUED' || run.status === 'WAITING' || run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
-                      <RetryRunButton runId={run.id} resume={waitingForDelay} />
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/logs/${run.id}`}>View details</Link>
+                      </Button>
+                      {(run.status === 'QUEUED' || run.status === 'WAITING' || run.status === 'FAILED' || unconfirmed || run.status === 'PAUSED') && (
+                        <RetryRunButton runId={run.id} resume={waitingForDelay} />
+                      )}
+                      {(run.status === 'QUEUED' || run.status === 'WAITING' || run.status === 'PAUSED') && (
+                        <CancelRunButton runId={run.id} />
+                      )}
+                    </div>
                   </div>
                   {run.error && (
                     <p className="text-sm text-red-500">{run.error}</p>

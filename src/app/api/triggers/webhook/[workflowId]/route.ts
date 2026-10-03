@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { executeDurableWorkflowRun } from '@/lib/workflow-runner'
 import { getTriggerConfig, getTriggerKind, verifyWebhookSignature } from '@/lib/workflow-triggers'
 import { parseWorkflowPlan, type WorkflowValue } from '@/lib/workflow-semantics'
+import { getPublishedFlowPath } from '@/lib/workflow-snapshots'
 
 const MAX_BODY_BYTES = 256 * 1024
 const SENSITIVE_KEY = /authorization|cookie|password|secret|token|api[-_]?key/i
@@ -44,7 +45,9 @@ export async function POST(req: NextRequest, { params }: { params: { workflowId:
     where: { workflowId: params.workflowId },
     include: { workflow: true },
   })
-  const plan = parseWorkflowPlan(state?.workflow.flowPath)
+  const plan = state?.workflow
+    ? parseWorkflowPlan(getPublishedFlowPath(state.workflow))
+    : null
   if (!state?.workflow.publish || !plan || getTriggerKind(plan) !== 'webhook') {
     return Response.json({ message: 'Webhook is not active' }, { status: 404 })
   }

@@ -55,13 +55,10 @@ const EditorCanvasSidebar = ({ nodes }: Props) => {
   }, [googleFile, state.editor.selectedNode.id, state.editor.selectedNode.data.title])
 
   useEffect(() => {
-    if (nodeConnection.slackNode.slackAccessToken) {
-      fetchBotSlackChannels(
-        nodeConnection.slackNode.slackAccessToken,
-        setSlackChannels
-      )
+    if (nodeConnection.slackNode.connected) {
+      fetchBotSlackChannels(setSlackChannels)
     }
-  }, [nodeConnection.slackNode.slackAccessToken, setSlackChannels])
+  }, [nodeConnection.slackNode.connected, setSlackChannels])
 
   // ✅ SAFE FALLBACK (important)
   const hasNodes = (nodes?.length ?? 0) > 0

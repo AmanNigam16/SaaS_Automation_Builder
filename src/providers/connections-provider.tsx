@@ -3,7 +3,7 @@ import { createContext, useContext, useState } from 'react'
 
 export type ConnectionProviderProps = {
   discordNode: {
-    webhookURL: string
+    connected: boolean
     content: string
     webhookName: string
     guildName: string
@@ -12,7 +12,7 @@ export type ConnectionProviderProps = {
   googleNode: {}[]
   setGoogleNode: React.Dispatch<React.SetStateAction<any>>
   notionNode: {
-    accessToken: string
+    connected: boolean
     databaseId: string
     workspaceName: string
     content: ''
@@ -26,7 +26,7 @@ export type ConnectionProviderProps = {
   slackNode: {
     appId: string
     authedUserId: string
-    slackAccessToken: string
+    connected: boolean
     botUserId: string
     teamId: string
     teamName: string
@@ -50,14 +50,14 @@ type ConnectionWithChildProps = {
 
 const InitialValues: ConnectionProviderProps = {
   discordNode: {
-    webhookURL: '',
+    connected: false,
     content: '',
     webhookName: '',
     guildName: '',
   },
   googleNode: [],
   notionNode: {
-    accessToken: '',
+    connected: false,
     databaseId: '',
     workspaceName: '',
     content: '',
@@ -70,7 +70,7 @@ const InitialValues: ConnectionProviderProps = {
   slackNode: {
     appId: '',
     authedUserId: '',
-    slackAccessToken: '',
+    connected: false,
     botUserId: '',
     teamId: '',
     teamName: '',

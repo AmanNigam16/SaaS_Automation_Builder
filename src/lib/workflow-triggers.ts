@@ -5,6 +5,7 @@ import { google } from 'googleapis'
 import { db } from '@/lib/db'
 import { getGoogleWorkspaceClient } from '@/lib/google-drive'
 import { executeDurableWorkflowRun } from '@/lib/workflow-runner'
+import { getPublishedFlowPath } from '@/lib/workflow-snapshots'
 import { createOrRenewDriveListener } from '@/lib/google-drive-listener'
 import { getNextScheduleAt } from '@/lib/workflow-schedule'
 import {
@@ -229,7 +230,7 @@ const pollCalendar = async (
 export const processWorkflowTrigger = async (workflowId: string, baseUrl?: string) => {
   const state = await db.workflowTriggerState.findUnique({ where: { workflowId }, include: { workflow: true } })
   if (!state?.workflow.publish) return { status: 'inactive' as const }
-  const plan = parseWorkflowPlan(state.workflow.flowPath)
+  const plan = parseWorkflowPlan(getPublishedFlowPath(state.workflow))
   if (!plan) return { status: 'invalid' as const }
   const config = getTriggerConfig(plan)
   const throttleMs = (config.triggerThrottleSeconds ?? 0) * 1000

@@ -10,6 +10,7 @@ import {
   parseWorkflowExecutionState,
   verifyWorkflowResumeToken,
 } from '@/lib/workflow-runner'
+import { getRunFlowPath } from '@/lib/workflow-snapshots'
 
 export async function GET(req: NextRequest) {
   const runId = req.nextUrl.searchParams.get('run_id')
@@ -37,7 +38,10 @@ export async function GET(req: NextRequest) {
   }
 
   const executionState = parseWorkflowExecutionState(run.output)
-  const plan = parseFlowSteps(run.workflow.flowPath)
+  const plan = parseFlowSteps(getRunFlowPath({
+    executionPlan: run.executionPlan,
+    flowPath: run.workflow.flowPath,
+  }))
   if (!executionState || Array.isArray(plan)) {
     return NextResponse.json({ message: 'resume state missing' }, { status: 409 })
   }

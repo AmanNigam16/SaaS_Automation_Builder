@@ -10,6 +10,7 @@ import {
   parseFlowSteps,
   parseWorkflowExecutionState,
 } from '@/lib/workflow-runner'
+import { getRunFlowPath } from '@/lib/workflow-snapshots'
 
 const hasValidRetryToken = (token: string | null, expectedHash: string | null) => {
   if (!token || !expectedHash || !/^[a-f0-9]{64}$/.test(expectedHash)) {
@@ -73,7 +74,10 @@ export async function GET(req: NextRequest) {
     if (step.creditCharged) reservedStepIndexes.add(step.stepIndex)
   }
 
-  const steps = parseFlowSteps(run.workflow.flowPath)
+  const steps = parseFlowSteps(getRunFlowPath({
+    executionPlan: run.executionPlan,
+    flowPath: run.workflow.flowPath,
+  }))
   const executionState = !Array.isArray(steps)
     ? parseWorkflowExecutionState(run.output)
     : null

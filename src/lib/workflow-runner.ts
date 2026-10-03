@@ -2,9 +2,11 @@ import axios from 'axios'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
-import { postContentToWebHook } from '@/app/(main)/(pages)/connections/_actions/discord-connection'
-import { onCreateNewPageInDatabase } from '@/app/(main)/(pages)/connections/_actions/notion-connection'
-import { postMessageToSlack } from '@/app/(main)/(pages)/connections/_actions/slack-connection'
+import {
+  createNotionPageForUser,
+  sendDiscordMessageForUser,
+  sendSlackMessageForUser,
+} from '@/lib/provider-actions'
 import { executeCalendarAction, executeGmailAction } from '@/lib/google-workspace'
 import { executeAiAction } from '@/lib/ai-action'
 import { executeOutboundWebhook } from '@/lib/outbound-webhook'
@@ -33,6 +35,9 @@ type WorkflowRecord = {
   notionAccessToken: string | null
   notionTemplate: string | null
   flowPath: string | null
+  publishedFlowPath?: string | null
+  draftVersion?: number
+  publishedVersion?: number | null
   cronPath: string | null
   publish: boolean | null
 }
@@ -152,15 +157,9 @@ const prepareAction = async (
       : flow.discordTemplate
     if (!template) throw new Error('Discord template is missing')
 
-    const discordMessage = await db.discordWebhook.findFirst({
-      where: { userId: flow.userId },
-      select: { url: true },
-    })
-
-    if (!discordMessage) throw new Error('Discord connection is missing')
-
     return async () => {
-      await postContentToWebHook(template, discordMessage.url)
+      const result = await sendDiscordMessageForUser(flow.userId, template)
+      if (result.message !== 'success') throw new Error('Discord connection is missing')
       return { message: 'Message sent' }
     }
   }
@@ -170,24 +169,23 @@ const prepareAction = async (
       ? String(resolveExpression(config.template, context!))
       : flow.slackTemplate
     if (
-      !flow.slackAccessToken ||
       !template ||
       !flow.slackChannels.length
     ) {
       throw new Error('Slack configuration is incomplete')
     }
-
     const channels = flow.slackChannels.map((channel) => ({
       label: channel,
       value: channel,
     }))
 
     return async () => {
-      await postMessageToSlack(
-        flow.slackAccessToken!,
+      const result = await sendSlackMessageForUser(
+        flow.userId,
         channels,
         template
       )
+      if (result.message !== 'Success') throw new Error('Slack configuration is incomplete')
       return { message: 'Message sent' }
     }
   }
@@ -198,17 +196,15 @@ const prepareAction = async (
       : flow.notionTemplate
     if (
       !flow.notionDbId ||
-      !flow.notionAccessToken ||
       !template
     ) {
       throw new Error('Notion configuration is incomplete')
     }
-
     const content = JSON.parse(template)
     return async () => {
-      const page = await onCreateNewPageInDatabase(
+      const page = await createNotionPageForUser(
+        flow.userId,
         flow.notionDbId!,
-        flow.notionAccessToken!,
         content
       )
       return { message: 'Page created', pageId: page?.id ?? null }
@@ -788,6 +784,10 @@ export const executeDurableWorkflowRun = async (
           triggerEventId: trigger.eventId,
           status: 'QUEUED',
           input: trigger.metadata,
+          workflowVersion: flow.publish
+            ? flow.publishedVersion ?? flow.draftVersion
+            : flow.draftVersion,
+          executionPlan: steps as unknown as Prisma.InputJsonValue,
         },
         select: { id: true },
       })

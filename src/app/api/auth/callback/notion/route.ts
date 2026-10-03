@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       workspaceIcon: data.workspace_icon ?? '',
       workspaceName: data.workspace_name ?? '',
       databaseId: search.results[0]?.id ?? '',
+      grantedPermissions: ['selected_workspace_content'],
     })
     return redirectToConnections(req, 'connected')
   } catch {
