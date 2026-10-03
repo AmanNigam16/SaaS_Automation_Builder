@@ -90,10 +90,18 @@ const formatDuration = (startedAt: Date, finishedAt: Date | null) => {
 
 const allowedStatuses = new Set(Object.keys(statusDetails))
 
+const parseDateFilter = (value: string | undefined) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return null
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value
+    ? null
+    : date
+}
+
 const LogsPage = async ({
   searchParams,
 }: {
-  searchParams?: { query?: string; status?: string; trigger?: string }
+  searchParams?: { query?: string; status?: string; trigger?: string; from?: string; to?: string }
 }) => {
   const user = await currentUser()
   if (!user) return null
@@ -102,6 +110,16 @@ const LogsPage = async ({
   const trigger = searchParams?.trigger?.trim() ?? ''
   const status = allowedStatuses.has(searchParams?.status ?? '')
     ? searchParams?.status
+    : undefined
+  const fromDate = parseDateFilter(searchParams?.from)
+  const toDate = parseDateFilter(searchParams?.to)
+  const from = fromDate ? searchParams?.from ?? '' : ''
+  const to = toDate ? searchParams?.to ?? '' : ''
+  const startedAt = fromDate || toDate
+    ? {
+        ...(fromDate ? { gte: fromDate } : {}),
+        ...(toDate ? { lt: new Date(toDate.getTime() + 86_400_000) } : {}),
+      }
     : undefined
 
   const runs = await db.workflowRun.findMany({
@@ -116,6 +134,7 @@ const LogsPage = async ({
       ...(trigger
         ? { triggerType: { contains: trigger, mode: 'insensitive' as const } }
         : {}),
+      ...(startedAt ? { startedAt } : {}),
     },
     include: {
       workflow: { select: { name: true } },
@@ -139,9 +158,11 @@ const LogsPage = async ({
           </p>
         </div>
 
-        <form className="grid gap-3 rounded-lg border p-4 md:grid-cols-[1fr_220px_220px_auto]">
+        <form className="grid gap-3 rounded-lg border p-4 md:grid-cols-2 xl:grid-cols-[1fr_180px_150px_150px_180px_auto]">
           <Input name="query" defaultValue={query} placeholder="Search workflow name" />
           <Input name="trigger" defaultValue={trigger} placeholder="Filter trigger" />
+          <Input name="from" type="date" defaultValue={from} aria-label="Runs from date" />
+          <Input name="to" type="date" defaultValue={to} aria-label="Runs through date" />
           <select
             name="status"
             defaultValue={status ?? ''}

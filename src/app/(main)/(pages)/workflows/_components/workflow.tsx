@@ -22,9 +22,11 @@ type Props = {
   description: string
   id: string
   publish: boolean | null
+  draftVersion: number
+  publishedVersion: number | null
 }
 
-const Workflow = ({ description, id, name, publish }: Props) => {
+const Workflow = ({ description, id, name, publish, draftVersion, publishedVersion }: Props) => {
   const onPublishFlow = async (state: boolean) => {
     const response = await onFlowPublish(id, state)
     if (response) toast.message(response)
@@ -65,6 +67,10 @@ const Workflow = ({ description, id, name, publish }: Props) => {
           <div className="">
             <CardTitle className="text-lg">{name}</CardTitle>
             <CardDescription>{description}</CardDescription>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Draft v{draftVersion}
+              {publishedVersion ? ` · Published v${publishedVersion}` : ' · Not published'}
+            </p>
           </div>
         </Link>
       </CardHeader>

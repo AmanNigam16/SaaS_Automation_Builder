@@ -207,6 +207,80 @@ export const onDuplicateWorkflow = async (workflowId: string) => {
   return { message: 'Workflow duplicated as an unpublished draft' }
 }
 
+type WorkflowImport = {
+  format?: unknown
+  version?: unknown
+  workflow?: unknown
+}
+
+const optionalString = (value: unknown, maxLength: number) =>
+  typeof value === 'string' ? value.slice(0, maxLength) : null
+
+export const onImportWorkflow = async (content: string) => {
+  const { userId } = auth()
+  if (!userId) return { message: 'Unauthorized' }
+  if (!content || content.length > 1_000_000) {
+    return { message: 'Choose a Fuzzie workflow export smaller than 1 MB' }
+  }
+
+  let imported: WorkflowImport
+  try {
+    imported = JSON.parse(content) as WorkflowImport
+  } catch {
+    return { message: 'The selected file is not valid JSON' }
+  }
+
+  if (imported.format !== 'fuzzie-workflow' || imported.version !== 1) {
+    return { message: 'This is not a supported Fuzzie workflow export' }
+  }
+
+  const workflow = imported.workflow
+  if (!workflow || typeof workflow !== 'object' || Array.isArray(workflow)) {
+    return { message: 'The workflow export is incomplete' }
+  }
+
+  const data = workflow as Record<string, unknown>
+  const name = optionalString(data.name, 120)?.trim()
+  const description = optionalString(data.description, 1000)?.trim()
+  const nodes = optionalString(data.nodes, 500_000)
+  const edges = optionalString(data.edges, 500_000)
+
+  if (!name || description == null || nodes === null || edges === null) {
+    return { message: 'The workflow export has invalid required fields' }
+  }
+
+  try {
+    const parsedNodes = JSON.parse(nodes)
+    const parsedEdges = JSON.parse(edges)
+    if (!Array.isArray(parsedNodes) || !Array.isArray(parsedEdges)) throw new Error()
+  } catch {
+    return { message: 'The workflow graph in this export is invalid' }
+  }
+
+  const slackChannels = Array.isArray(data.slackChannels)
+    ? data.slackChannels.filter((value): value is string => typeof value === 'string').slice(0, 100)
+    : []
+
+  await db.workflows.create({
+    data: {
+      userId,
+      name: `${name} (Imported)`,
+      description,
+      nodes,
+      edges,
+      discordTemplate: optionalString(data.discordTemplate, 20_000),
+      notionTemplate: optionalString(data.notionTemplate, 20_000),
+      slackTemplate: optionalString(data.slackTemplate, 20_000),
+      slackChannels,
+      notionDbId: optionalString(data.notionDbId, 500),
+      publish: false,
+    },
+  })
+
+  revalidatePath('/workflows')
+  return { message: 'Workflow imported as an unpublished draft' }
+}
+
 /* ----------------------------------
    Get Nodes & Edges (Whiteboard)
 ---------------------------------- */

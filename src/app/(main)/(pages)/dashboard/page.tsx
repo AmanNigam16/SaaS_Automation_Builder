@@ -62,11 +62,12 @@ const DashboardPage = async () => {
           </Card>
         )}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {[
             { label: 'Workflows', value: workflowCount, icon: Workflow },
             { label: 'Total runs', value: totalRuns, icon: Activity },
             { label: 'Successful runs', value: countFor('SUCCEEDED'), icon: CheckCircle2 },
+            { label: 'Task usage', value: successfulActions, icon: CheckCircle2 },
             { label: 'Estimated time saved', value: `${estimatedMinutesSaved} min`, icon: Clock3 },
           ].map(({ label, value, icon: Icon }) => (
             <Card key={label}><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">{label}</CardTitle><Icon className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><p className="text-2xl font-semibold">{value}</p>{label === 'Estimated time saved' && <p className="text-xs text-muted-foreground">Estimate: 2 minutes per completed action</p>}</CardContent></Card>
