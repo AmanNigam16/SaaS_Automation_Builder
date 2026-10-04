@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 
 import React from 'react'
 import BillingDashboard from './_components/billing-dashboard'
+import { getBillingPlan, isCompletedCheckout } from '@/lib/billing-plans'
 
 type Props = {
   searchParams?: { [key: string]: string | undefined }
@@ -10,36 +11,45 @@ type Props = {
 
 const Billing = async (props: Props) => {
   const { session_id } = props.searchParams ?? {}
+  let checkoutMessage: string | null = null
 
   if (session_id) {
-    // ✅ Import EVERYTHING at runtime
-    const Stripe = (await import('stripe')).default
-    const { currentUser } = await import('@clerk/nextjs')
+    const { auth } = await import('@clerk/nextjs')
     const { db } = await import('@/lib/db')
+    const { userId } = auth()
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET!, {
-      typescript: true,
-      apiVersion: '2023-10-16',
-    })
-
-    const session = await stripe.checkout.sessions.listLineItems(session_id)
-    const user = await currentUser()
-
-    if (user && session.data.length > 0) {
-      await db.user.update({
-        where: {
-          clerkId: user.id,
-        },
-        data: {
-          tier: session.data[0].description,
-          credits:
-            session.data[0].description === 'Unlimited'
-              ? 'Unlimited'
-              : session.data[0].description === 'Pro'
-              ? '100'
-              : '10',
-        },
-      })
+    if (!userId || !process.env.STRIPE_SECRET) {
+      checkoutMessage = 'We could not verify this checkout.'
+    } else {
+      try {
+        const Stripe = (await import('stripe')).default
+        const stripe = new Stripe(process.env.STRIPE_SECRET, {
+          typescript: true,
+          apiVersion: '2023-10-16',
+        })
+        const session = await stripe.checkout.sessions.retrieve(session_id, {
+          expand: ['line_items.data.price'],
+        })
+        const price = session.line_items?.data[0]?.price
+        const plan = getBillingPlan(typeof price === 'string' ? null : price?.nickname)
+        if (
+          session.client_reference_id !== userId ||
+          session.metadata?.fuzzieUserId !== userId ||
+          session.mode !== 'subscription' ||
+          !isCompletedCheckout(session.status, session.payment_status) ||
+          !plan
+        ) {
+          checkoutMessage = 'This checkout could not be verified for your account.'
+        } else {
+          await db.user.update({
+            where: { clerkId: userId },
+            data: { tier: plan.tier, credits: plan.credits },
+          })
+          checkoutMessage = `${plan.tier} is now active.`
+        }
+      } catch {
+        checkoutMessage = 'We could not verify this checkout. Your current plan was not changed.'
+      }
     }
   }
 
@@ -48,7 +58,7 @@ const Billing = async (props: Props) => {
       <h1 className="sticky top-0 z-[10] flex items-center justify-between border-b bg-background/50 p-6 text-4xl backdrop-blur-lg">
         <span>Billing</span>
       </h1>
-      <BillingDashboard />
+      <BillingDashboard checkoutMessage={checkoutMessage} />
     </div>
   )
 }

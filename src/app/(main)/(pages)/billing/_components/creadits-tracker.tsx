@@ -3,11 +3,13 @@ import { Progress } from '@/components/ui/progress'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 
 type Props = {
-  credits: number
+  credits: string
   tier: string
 }
 
 const CreditTracker = ({ credits, tier }: Props) => {
+  const numericCredits = Number.parseInt(credits, 10)
+  const safeCredits = Number.isFinite(numericCredits) ? numericCredits : 0
   return (
     <div className="p-6">
       <Card className="p-6">
@@ -16,17 +18,18 @@ const CreditTracker = ({ credits, tier }: Props) => {
           <Progress
             value={
               tier == 'Free'
-                ? credits * 10
+                ? safeCredits * 10
                 : tier == 'Unlimited'
                 ? 100
-                : credits
+                : safeCredits
             }
             className="w-full"
           />
           <div className="flex justify-end">
             <p>
-              {credits}/
-              {tier == 'Free' ? 10 : tier == 'Pro' ? 100 : 'Unlimited'}
+              {tier === 'Unlimited'
+                ? 'Unlimited'
+                : `${safeCredits}/${tier == 'Free' ? 10 : tier == 'Pro' ? 100 : 0}`}
             </p>
           </div>
         </CardContent>

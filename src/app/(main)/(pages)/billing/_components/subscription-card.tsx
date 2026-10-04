@@ -3,8 +3,9 @@ import React from 'react'
 
 type Props = {
   onPayment(id: string): void
-  products: any[]
+  products: Array<{ id: string; nickname: string; unitAmount: number | null; currency: string }>
   tier: string
+  loading: boolean
 }
 
 import {
@@ -16,12 +17,13 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-export const SubscriptionCard = ({ onPayment, products, tier }: Props) => {
-  console.log(products)
+export const SubscriptionCard = ({ onPayment, products, tier, loading }: Props) => {
+  if (loading) return <p className="text-sm text-muted-foreground">Loading billing plans…</p>
+  if (!products.length) return null
   return (
     <section className="flex w-full justify-center md:flex-row flex-col gap-6">
       {products &&
-        products.map((product: any) => (
+        products.map((product) => (
           <Card
             className="p-3"
             key={product.id}
@@ -48,12 +50,9 @@ export const SubscriptionCard = ({ onPayment, products, tier }: Props) => {
                   credits
                 </p>
                 <p className="font-bold">
-                  {product.nickname == 'Free'
+                  {product.unitAmount === 0
                     ? 'Free'
-                    : product.nickname == 'Pro'
-                    ? '29.99'
-                    : product.nickname == 'Unlimited' && '99.99'}
-                  /mo
+                    : `${new Intl.NumberFormat('en', { style: 'currency', currency: product.currency }).format((product.unitAmount ?? 0) / 100)}/mo`}
                 </p>
               </div>
               {product.nickname == tier ? (
