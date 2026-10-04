@@ -17,7 +17,7 @@ const WorkflowButton = (props: Props) => {
     setOpen(
       <CustomModal
         title="Create a Workflow Automation"
-        subheading="Workflows are a powerfull that help you automate tasks."
+        subheading="Create a workflow to automate a repeatable task."
       >
         <Workflowform />
       </CustomModal>
@@ -26,6 +26,7 @@ const WorkflowButton = (props: Props) => {
 
   return (
     <Button
+      aria-label="Create workflow"
       size={'icon'}
       {...(credits !== '0'
         ? {

@@ -57,7 +57,7 @@ const BillingDashboard = ({ checkoutMessage }: { checkoutMessage: string | null 
           </CardContent>
         </Card>
       )}
-      <div className="flex gap-5 p-6">
+      <div className="flex flex-wrap gap-5 p-6">
         <SubscriptionCard
           onPayment={onPayment}
           tier={tier}

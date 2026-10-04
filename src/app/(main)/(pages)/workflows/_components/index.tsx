@@ -1,7 +1,11 @@
 import React from 'react'
+import Link from 'next/link'
+import { WandSparkles } from 'lucide-react'
 import Workflow from './workflow'
 import { onGetWorkflows } from '../_actions/workflow-connections'
 import MoreCredits from './more-creadits'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 type Props = {}
 
@@ -19,9 +23,22 @@ const Workflows = async (props: Props) => {
             />
           ))
         ) : (
-          <div className="mt-28 flex text-muted-foreground items-center justify-center">
-            No Workflows
-          </div>
+          <Card className="mx-auto mt-20 w-full max-w-xl border-dashed">
+            <CardHeader className="text-center">
+              <CardTitle>No workflows yet</CardTitle>
+              <CardDescription>
+                Start from a guided draft, review each step, then publish when the required connections are ready.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center">
+              <Button asChild variant="outline">
+                <Link href="/templates">
+                  <WandSparkles className="mr-2 h-4 w-4" />
+                  Browse templates
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </section>
     </div>

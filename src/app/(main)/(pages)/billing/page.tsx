@@ -41,11 +41,16 @@ const Billing = async (props: Props) => {
         ) {
           checkoutMessage = 'This checkout could not be verified for your account.'
         } else {
-          await db.user.update({
-            where: { clerkId: userId },
+          const updated = await db.user.updateMany({
+            where: {
+              clerkId: userId,
+              OR: [{ tier: null }, { tier: { not: plan.tier } }],
+            },
             data: { tier: plan.tier, credits: plan.credits },
           })
-          checkoutMessage = `${plan.tier} is now active.`
+          checkoutMessage = updated.count
+            ? `${plan.tier} is now active.`
+            : `${plan.tier} is already active.`
         }
       } catch {
         checkoutMessage = 'We could not verify this checkout. Your current plan was not changed.'
